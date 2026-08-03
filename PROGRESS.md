@@ -386,14 +386,73 @@ plans σε ασφαλή model pipelines.
 - Άγνωστη ή μη υλοποιημένη factory προκαλεί fail-closed σφάλμα.
 - Ίδιο plan και seed παράγουν ίδιες προβλέψεις στο deterministic test.
 
+## Shared Cross-Validation και Machine Learning Evaluator
+
+Υλοποιήθηκε κοινός μηχανισμός folds για conventional και Agentic pipelines.
+
+### CrossValidationFoldProvider
+
+Οι βασικές κλάσεις είναι:
+
+- `CrossValidationFoldProvider`,
+- `CrossValidationFoldSet`,
+- `FoldSplit`.
+
+Ο provider:
+
+- δημιουργεί deterministic `RepeatedStratifiedKFold` splits,
+- υλοποιεί materialization μία φορά για όλα τα μοντέλα,
+- μετατρέπει τα index arrays σε read-only,
+- αποθηκεύει folds, repeats και random seed,
+- συνδέει τα folds με SHA-256 fingerprint της target σειράς,
+- απορρίπτει χρήση των folds σε διαφορετικό sample ή row ordering.
+
+Το υπάρχον conventional benchmark μεταφέρθηκε στον ίδιο provider χωρίς μεταβολή
+των πειραματικών αποτελεσμάτων.
+
+### MachineLearningEvaluator
+
+Υλοποιήθηκαν τα typed objects:
+
+- `EvaluationConfig`,
+- `ClassificationMetrics`,
+- `FoldEvaluationResult`,
+- `MetricAggregate`,
+- `ModelEvaluationResult`,
+- `EvaluationOutput`.
+
+Η κλάση `MachineLearningEvaluator`:
+
+- αξιολογεί injected pipeline πάνω στα κοινά folds,
+- δημιουργεί νέο clone πριν από κάθε fit,
+- υπολογίζει τις ίδιες μετρικές με το conventional baseline,
+- επιστρέφει fold-level αποτελέσματα και aggregates,
+- κρατά αναλυτικές out-of-fold predictions για plots και audit,
+- καταγράφει αποτυχίες ανά fold ως typed feedback,
+- χαρακτηρίζει το αποτέλεσμα ως `success`, `partial_failure` ή `error`.
+
+### Regression verification
+
+Το πλήρες conventional benchmark επανεκτελέστηκε μετά το refactor. Οι κύριες
+μετρικές παρέμειναν ακριβώς ίδιες:
+
+| Model | PR-AUC |
+|---|---:|
+| Logistic Regression | 0,549222 |
+| Decision Tree | 0,611241 |
+| Random Forest | 0,831273 |
+
+Η επανεκτέλεση επιβεβαίωσε ότι η νέα κοινή υποδομή folds δεν άλλαξε τα
+επιστημονικά αποτελέσματα.
+
 ## Έλεγχοι και περιβάλλον
 
 - Εγκαταστάθηκαν όλες οι απαιτούμενες βιβλιοθήκες.
 - Επιλύθηκε η συμβατότητα LangChain/LangSmith.
 - Ρυθμίστηκε το VS Code ώστε να χρησιμοποιεί τον σωστό Python interpreter και το
   `src` import path.
-- Υπάρχουν 41 αυτοματοποιημένοι έλεγχοι.
-- Τρέχον αποτέλεσμα: `41 passed`.
+- Υπάρχουν 49 αυτοματοποιημένοι έλεγχοι.
+- Τρέχον αποτέλεσμα: `49 passed`.
 
 ## GitHub
 
@@ -410,13 +469,12 @@ https://github.com/tgalirop/AgenticAI_thesis
 
 ## Επόμενα βήματα
 
-1. Υλοποίηση object-oriented ML Evaluator για Agent iterations.
-2. Υλοποίηση typed feedback policy και termination decisions.
-3. Υλοποίηση persistent Agent state.
-4. Υλοποίηση Strategy Generator και model-client abstraction.
-5. Σύνδεση των components με λεπτούς LangGraph nodes.
-6. Controlled data degradation scenario.
-7. Conventional vs Agentic στατιστική σύγκριση.
+1. Υλοποίηση typed feedback policy και termination decisions.
+2. Υλοποίηση persistent Agent state και iteration history.
+3. Υλοποίηση Strategy Generator και model-client abstraction.
+4. Σύνδεση των components με λεπτούς LangGraph nodes.
+5. Controlled data degradation scenario.
+6. Conventional vs Agentic στατιστική σύγκριση.
 
 Όλα τα παραπάνω Agentic components θα υλοποιηθούν ως συνεργαζόμενες κλάσεις και
 όχι ως monolithic scripts ή tightly coupled functions.

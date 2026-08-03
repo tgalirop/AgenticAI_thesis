@@ -10,9 +10,9 @@ from typing import Any, Mapping, Sequence
 import numpy as np
 import pandas as pd
 import polars as pl
-from sklearn.model_selection import RepeatedStratifiedKFold
 from sklearn.pipeline import Pipeline
 
+from agenticai_thesis.modeling.cross_validation import CrossValidationFoldProvider
 from agenticai_thesis.modeling.metrics import compute_classification_metrics
 from agenticai_thesis.modeling.models import create_estimator, model_requires_scaling
 from agenticai_thesis.modeling.preprocessing import (
@@ -88,21 +88,22 @@ def benchmark_models(
 
     x = sample[MODEL_FEATURES]
     y = sample[target_column].astype(int).to_numpy()
-    splitter = RepeatedStratifiedKFold(
-        n_splits=folds,
-        n_repeats=repeats,
-        random_state=random_seed,
-    )
     # Materialising indices once is the key fairness guarantee: every estimator
     # sees exactly the same training and validation observations in every run.
-    shared_splits = list(splitter.split(x, y))
+    shared_folds = CrossValidationFoldProvider(
+        folds=folds,
+        repeats=repeats,
+        random_seed=random_seed,
+    ).create(y)
     metric_records: list[dict[str, Any]] = []
     prediction_records: list[pd.DataFrame] = []
 
     for model_name in model_names:
-        for split_index, (train_indices, validation_indices) in enumerate(shared_splits):
-            repeat_index = split_index // folds + 1
-            fold_index = split_index % folds + 1
+        for split in shared_folds.splits:
+            train_indices = split.train_indices
+            validation_indices = split.validation_indices
+            repeat_index = split.repeat
+            fold_index = split.fold
             estimator = create_estimator(
                 model_name,
                 random_seed=random_seed,

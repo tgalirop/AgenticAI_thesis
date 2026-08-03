@@ -190,6 +190,28 @@ scope, διατηρεί τη σειρά τους ανά στήλη και κλω
 έλεγχο και αρνείται execution σε validation-fold ή temporal-test context, ακόμη
 και αν του δοθεί χειροκίνητα ένα φαινομενικά έγκυρο result.
 
+## Shared cross-validation και ML evaluation
+
+Η conventional και η Agentic αξιολόγηση χρησιμοποιούν την ίδια κλάση
+`CrossValidationFoldProvider`. Ο provider δημιουργεί μία φορά immutable
+`CrossValidationFoldSet` και συνδέει τα indices με SHA-256 fingerprint της ακριβούς
+target σειράς. Έτσι, ένα σύνολο folds δεν μπορεί να χρησιμοποιηθεί κατά λάθος σε
+διαφορετικό sample ή σε διαφορετική σειρά εγγραφών.
+
+Ο `MachineLearningEvaluator`:
+
+- λαμβάνει injected fold set και configuration,
+- κλωνοποιεί το pipeline πριν από κάθε fit,
+- δεν μεταβάλλει το αρχικό reusable pipeline,
+- παράγει typed fold results και metric aggregates,
+- κρατά τις αναλυτικές OOF predictions εκτός του compact Agent state,
+- καταγράφει fold errors ως typed feedback,
+- διαχωρίζει `success`, `partial_failure` και `error`.
+
+Με αυτή τη διάταξη, conventional και Agentic pipelines αξιολογούνται με κοινή
+υποδομή folds και metrics. Η μόνη πειραματική διαφορά παραμένει η στρατηγική
+preprocessing.
+
 ## Definition of Done για Agentic components
 
 Ένα component θεωρείται ολοκληρωμένο μόνο όταν:
