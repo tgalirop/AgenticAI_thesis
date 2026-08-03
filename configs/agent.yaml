@@ -6,3 +6,12 @@ allow_arbitrary_code_execution: false
 stopping:
   no_improvement_patience: 2
 
+# Only registered declarative actions can reach the deterministic Executor.
+allowed_transformations:
+  - impute_numeric
+  - impute_categorical
+  - scale_numeric
+  - log_transform
+  - one_hot_encode
+  - class_weight
+  - resample_classes

@@ -109,6 +109,40 @@ def _invalid_value_expressions(schema_names: Iterable[str]) -> dict[str, pl.Expr
     return checks
 
 
+def _consistency_expressions(schema_names: Iterable[str]) -> dict[str, pl.Expr]:
+    """Define cross-column rules that must hold between derived features.
+
+    Validity asks whether one value belongs to its permitted domain. Consistency
+    asks whether two or more individually valid values agree with each other. The
+    distinction is preserved explicitly because the thesis evaluates both quality
+    dimensions independently.
+    """
+
+    columns = set(schema_names)
+    checks: dict[str, pl.Expr] = {}
+    if {"step", "hour"}.issubset(columns):
+        expected_hour = ((pl.col("step") - 1) % 24).cast(pl.Int16)
+        checks["hour_inconsistent_with_step"] = (pl.col("hour") != expected_hour).sum()
+    if {"step", "day"}.issubset(columns):
+        expected_day = ((pl.col("step") - 1) // 24).cast(pl.Int16)
+        checks["day_inconsistent_with_step"] = (pl.col("day") != expected_day).sum()
+    if {"amount", "log_amount"}.issubset(columns):
+        # A small tolerance avoids treating harmless floating-point rounding as a
+        # genuine inconsistency between amount and its log1p transformation.
+        checks["log_amount_inconsistent_with_amount"] = (
+            (pl.col("log_amount") - pl.col("amount").log1p()).abs() > 1e-10
+        ).sum()
+    if {"type", "is_transfer"}.issubset(columns):
+        checks["is_transfer_inconsistent_with_type"] = (
+            pl.col("is_transfer") != (pl.col("type") == "TRANSFER").cast(pl.Int8)
+        ).sum()
+    if {"type", "is_cash_out"}.issubset(columns):
+        checks["is_cash_out_inconsistent_with_type"] = (
+            pl.col("is_cash_out") != (pl.col("type") == "CASH_OUT").cast(pl.Int8)
+        ).sum()
+    return checks
+
+
 def _value_distribution(
     lazy_frame: pl.LazyFrame,
     column: str,
@@ -169,6 +203,10 @@ def profile_dataset(
     ]
     invalid_checks = _invalid_value_expressions(schema_names)
     aggregate_expressions.extend(expression.alias(name) for name, expression in invalid_checks.items())
+    consistency_checks = _consistency_expressions(schema_names)
+    aggregate_expressions.extend(
+        expression.alias(name) for name, expression in consistency_checks.items()
+    )
     aggregate = lazy_frame.select(aggregate_expressions).collect(engine="streaming").to_dicts()[0]
 
     row_count = int(aggregate["__rows"])
@@ -198,6 +236,7 @@ def profile_dataset(
     }
 
     invalid_values = {name: int(aggregate[name]) for name in invalid_checks}
+    consistency_values = {name: int(aggregate[name]) for name in consistency_checks}
     rss_after = process.memory_info().rss
     elapsed = time.perf_counter() - timer_started
 
@@ -238,6 +277,10 @@ def profile_dataset(
         "invalid_values": {
             "checks": invalid_values,
             "total_failures": sum(invalid_values.values()),
+        },
+        "consistency": {
+            "checks": consistency_values,
+            "total_failures": sum(consistency_values.values()),
         },
         "time_range": {
             "column": time_column,

@@ -1,6 +1,7 @@
 """Tests for the standalone data profiler."""
 
 import json
+import math
 from pathlib import Path
 
 import polars as pl
@@ -19,7 +20,7 @@ def _write_profile_fixture(path: Path) -> Path:
             "isFraud": [0, 1, 1, 3],
             "hour": [0, 1, 1, 25],
             "day": [0, 0, 0, -1],
-            "log_amount": [2.397895, 4.615121, 4.615121, None],
+            "log_amount": [math.log1p(10.0), math.log1p(100.0), math.log1p(100.0), None],
             "is_transfer": [0, 1, 1, 0],
             "is_cash_out": [0, 0, 0, 2],
             "is_merchant_destination": [1, 0, 0, 0],
@@ -59,6 +60,11 @@ def test_profile_reports_named_domain_validation_failures(tmp_path: Path) -> Non
     assert checks["day_negative"] == 1
     assert checks["is_cash_out_not_binary"] == 1
     assert report["invalid_values"]["total_failures"] == 6
+    # The invalid binary flag is also inconsistent with its source transaction
+    # type, demonstrating the distinction between validity and consistency.
+    assert report["consistency"]["checks"]["is_cash_out_inconsistent_with_type"] == 1
+    # The last row also carries an invalid hour and day relative to step=2.
+    assert report["consistency"]["total_failures"] == 3
 
 
 def test_generated_report_is_strict_json_and_matches_returned_schema(tmp_path: Path) -> None:
