@@ -7,7 +7,7 @@ import pandas as pd
 from agenticai_thesis.reporting import ThesisFigureGenerator
 
 
-def test_generator_creates_all_five_nonempty_figures(tmp_path) -> None:
+def test_generator_creates_all_six_nonempty_figures(tmp_path) -> None:
     metrics = pd.DataFrame(
         [
             {"pipeline": pipeline, "model": model, "pr_auc": 0.2, "precision": 0.1, "recall": 0.8}
@@ -32,5 +32,5 @@ def test_generator_creates_all_five_nonempty_figures(tmp_path) -> None:
 
     outputs = ThesisFigureGenerator(metrics_path, summary_path, tmp_path / "figures").generate_all()
 
-    assert len(outputs) == 5
+    assert len(outputs) == 6
     assert all(path.is_file() and path.stat().st_size > 1_000 for path in outputs)

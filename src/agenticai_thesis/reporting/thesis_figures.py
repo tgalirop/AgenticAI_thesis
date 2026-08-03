@@ -45,6 +45,7 @@ class ThesisFigureGenerator:
             self._plot_quality(summary),
             self._plot_runtime(summary),
             self._plot_workflow(),
+            self._plot_high_level_architecture(),
         )
 
     def _plot_pr_auc(self, metrics: pd.DataFrame) -> Path:
@@ -160,6 +161,129 @@ class ThesisFigureGenerator:
         axis.set_title("Implemented LangGraph Agentic Data-Quality Workflow", fontsize=15, pad=14)
         axis.text(6.5, 0.65, "Only validated declarative plans reach the deterministic Executor; the temporal holdout opens after plan selection.", ha="center", fontsize=9, color="#555")
         return self._save(figure, "langgraph_agent_workflow.png")
+
+    def _plot_high_level_architecture(self) -> Path:
+        """Summarize the complete leakage-safe research workflow in one figure."""
+
+        figure, axis = plt.subplots(figsize=(16, 9))
+        axis.set_xlim(0, 16)
+        axis.set_ylim(0, 10)
+        axis.axis("off")
+
+        # Colors communicate architectural responsibility: data, conventional,
+        # Agentic, evaluation and immutable/test-only components.
+        colors = {
+            "data": "#DCEAF7",
+            "conventional": "#D9E8FB",
+            "agentic": "#FCE4C5",
+            "evaluation": "#DDF0DD",
+            "locked": "#E8DDF3",
+            "external": "#FFF2B2",
+        }
+
+        def box(
+            x: float,
+            y: float,
+            width: float,
+            height: float,
+            label: str,
+            color: str,
+            *,
+            dashed: bool = False,
+            fontsize: float = 10,
+        ) -> None:
+            patch = FancyBboxPatch(
+                (x, y),
+                width,
+                height,
+                boxstyle="round,pad=0.08",
+                facecolor=color,
+                edgecolor="#34495E",
+                linewidth=1.6,
+                linestyle="--" if dashed else "-",
+            )
+            axis.add_patch(patch)
+            axis.text(x + width / 2, y + height / 2, label, ha="center", va="center", fontsize=fontsize)
+
+        def arrow(
+            start: tuple[float, float],
+            end: tuple[float, float],
+            label: str = "",
+            *,
+            dashed: bool = False,
+        ) -> None:
+            axis.annotate(
+                "",
+                xy=end,
+                xytext=start,
+                arrowprops={
+                    "arrowstyle": "->",
+                    "lw": 1.6,
+                    "color": "#4A4A4A",
+                    "linestyle": "--" if dashed else "-",
+                },
+            )
+            if label:
+                axis.text(
+                    (start[0] + end[0]) / 2,
+                    (start[1] + end[1]) / 2 + 0.18,
+                    label,
+                    ha="center",
+                    fontsize=8.5,
+                    color="#444",
+                )
+
+        # Data preparation and the leakage boundary.
+        box(0.35, 7.7, 1.65, 1.0, "Raw PaySim CSV\n~6.36M rows", colors["data"])
+        box(2.55, 7.7, 1.75, 1.0, "Polars Pipeline\nCSV → Parquet", colors["data"])
+        box(4.85, 7.7, 2.0, 1.0, "Temporal Split\nby transaction step", colors["data"])
+        box(7.55, 8.25, 2.15, 0.9, "Development Data\nmodel/plan selection", colors["data"])
+        box(7.55, 6.85, 2.15, 0.9, "Locked Temporal Test\nopened only at the end", colors["locked"], dashed=True)
+        arrow((2.0, 8.2), (2.55, 8.2))
+        arrow((4.3, 8.2), (4.85, 8.2))
+        arrow((6.85, 8.2), (7.55, 8.7))
+        arrow((6.85, 8.0), (7.55, 7.3))
+
+        # Two fair experimental branches start from the same development source.
+        box(1.0, 4.65, 3.0, 1.25, "CONVENTIONAL BRANCH\nFixed preprocessing pipeline\n(shared 5×5 CV folds)", colors["conventional"], fontsize=10.5)
+        box(5.0, 4.65, 3.0, 1.25, "CONTROLLED DEGRADATION\nDeterministic MCAR injection\n(development copy only)", colors["agentic"], fontsize=10.5)
+        arrow((8.0, 8.25), (3.3, 5.9))
+        arrow((8.7, 8.25), (6.5, 5.9))
+
+        box(5.0, 2.35, 3.0, 1.5, "LANGGRAPH AGENT\nProfile → Generate → Validate\nExecute → Evaluate → Feedback\n(up to 3 iterations)", colors["agentic"], fontsize=10.5)
+        box(1.0, 2.55, 3.0, 1.1, "Degraded Conventional\nReference Baseline", colors["conventional"])
+        box(8.75, 3.05, 2.25, 1.15, "Groq Free Tier\nGPT-OSS 20B", colors["external"], dashed=True)
+        axis.text(9.88, 2.7, "Only compact profiles, metrics\nand JSON plans — never raw rows", ha="center", fontsize=8.2, color="#555")
+        arrow((3.0, 4.65), (2.6, 3.65))
+        arrow((6.5, 4.65), (6.5, 3.85))
+        arrow((8.75, 3.6), (8.0, 3.35), dashed=True)
+        arrow((8.0, 2.95), (8.75, 3.35), dashed=True)
+
+        # Identical model family and fold definitions preserve fair comparison.
+        box(0.65, 0.55, 3.7, 1.15, "Shared ML Evaluation\nLogistic Regression • Decision Tree • Random Forest\nPR-AUC primary metric", colors["evaluation"], fontsize=9.5)
+        box(5.0, 0.55, 2.9, 1.15, "Paired Comparison\nWilcoxon + Holm correction\nquality + predictive + runtime", colors["evaluation"], fontsize=9.5)
+        box(8.65, 0.55, 2.6, 1.15, "Selected Agentic Plan\nfrozen before test access", colors["evaluation"])
+        box(12.05, 2.9, 3.0, 1.3, "Final Temporal Evaluation\nConventional vs Agentic\non untouched holdout", colors["locked"], fontsize=10.5)
+        box(12.05, 0.55, 3.0, 1.15, "Thesis Outputs\nmetrics • statistics • plans\nfigures • audit logs", colors["evaluation"], fontsize=10.5)
+
+        arrow((2.5, 2.55), (2.5, 1.7))
+        arrow((5.7, 2.35), (3.9, 1.7))
+        arrow((4.35, 1.12), (5.0, 1.12))
+        arrow((7.9, 1.12), (8.65, 1.12), "accept")
+        arrow((9.7, 6.95), (12.05, 3.75), "test rows")
+        arrow((11.25, 1.2), (12.05, 3.1), "frozen plan")
+        arrow((13.55, 2.9), (13.55, 1.7))
+
+        axis.set_title("High-Level Architecture of the Complete Experimental Workflow", fontsize=17, pad=16)
+        axis.text(
+            8,
+            9.45,
+            "Leakage-safe data preparation, fair Conventional–Agentic comparison and auditable final evaluation",
+            ha="center",
+            fontsize=10,
+            color="#555",
+        )
+        return self._save(figure, "high_level_system_architecture.png")
 
     def _grouped_bars(self, axis: plt.Axes, metrics: pd.DataFrame, metric_names: tuple[str, ...], *, value_format: str) -> None:
         ordered = self._ordered(metrics)

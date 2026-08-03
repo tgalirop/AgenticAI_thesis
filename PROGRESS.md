@@ -646,9 +646,10 @@ Temporal PR-AUC:
 - Ο Groq client κάνει περιορισμένο retry όταν ο provider απορρίψει το JSON που
   παρήγαγε το ίδιο το μοντέλο (`json_validate_failed`), χωρίς να επαναλαμβάνει
   άσχετα HTTP 400 errors.
-- Προστέθηκε class-based `ThesisFigureGenerator` και reproducible CLI για πέντε
+- Προστέθηκε class-based `ThesisFigureGenerator` και reproducible CLI για έξι
   τελικά figures: PR-AUC, Precision/Recall, Data Quality, runtime και LangGraph
-  workflow. Όλα προέρχονται από τα ελεγμένα τελικά experiment artifacts.
+  workflow και high-level συνολική αρχιτεκτονική. Όλα προέρχονται από τα
+  ελεγμένα τελικά experiment artifacts.
 
 ## Επόμενο στάδιο: συγγραφή
 

@@ -616,6 +616,8 @@ python -m experiments.generate_final_figures
 - Data Quality Score πριν και μετά το επιλεγμένο plan,
 - runtime multiplier έναντι του conventional baseline,
 - το πραγματικά υλοποιημένο LangGraph workflow με validation και retry routing.
+- high-level αρχιτεκτονική ολόκληρου του experimental workflow, από το raw PaySim
+  έως το temporal holdout και τα τελικά thesis outputs.
 
 ## 14. Μεθοδολογικό συμπέρασμα
 
