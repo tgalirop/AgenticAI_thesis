@@ -50,6 +50,8 @@ reports/**/*.parquet
 !reports/transformation_plans/*.json
 figures/**/*.png
 figures/**/*.pdf
+# Keep only the final, thesis-ready comparative visualizations in Git.
+!figures/final_comparisons/*.png
 logs/**/*.log
 logs/**/*.json
 logs/**/*.jsonl

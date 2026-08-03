@@ -627,10 +627,10 @@ Temporal PR-AUC:
 Η τελική ερμηνεία παραμένει μικτή: η ποιότητα βελτιώθηκε με μικρό υπολογιστικό
 κόστος, αλλά η επίδραση στην predictive performance εξαρτάται από τον classifier.
 
-Το συνολικό test suite αυξήθηκε από 67 σε 93 tests και ολοκληρώνεται επιτυχώς:
+Το συνολικό test suite αυξήθηκε από 67 σε 94 tests και ολοκληρώνεται επιτυχώς:
 
 ```text
-93 passed
+94 passed
 ```
 
 ## Τελική ολοκλήρωση κώδικα
@@ -646,6 +646,9 @@ Temporal PR-AUC:
 - Ο Groq client κάνει περιορισμένο retry όταν ο provider απορρίψει το JSON που
   παρήγαγε το ίδιο το μοντέλο (`json_validate_failed`), χωρίς να επαναλαμβάνει
   άσχετα HTTP 400 errors.
+- Προστέθηκε class-based `ThesisFigureGenerator` και reproducible CLI για πέντε
+  τελικά figures: PR-AUC, Precision/Recall, Data Quality, runtime και LangGraph
+  workflow. Όλα προέρχονται από τα ελεγμένα τελικά experiment artifacts.
 
 ## Επόμενο στάδιο: συγγραφή
 

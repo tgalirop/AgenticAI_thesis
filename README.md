@@ -599,6 +599,24 @@ Regression, θετική στο Random Forest PR-AUC και αρνητική σ�
 πλήρη fold metrics, temporal metrics και Holm-corrected Wilcoxon tests βρίσκονται
 στο `reports/`.
 
+### Τελικά figures για τη συγγραφή
+
+Τα publication-ready συγκριτικά figures δημιουργούνται αποκλειστικά από τα
+τελικά temporal metrics και το Agentic run summary:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m experiments.generate_final_figures
+```
+
+Ο φάκελος `figures/final_comparisons/` περιέχει:
+
+- temporal PR-AUC σύγκριση Conventional–Agentic ανά classifier,
+- temporal Precision/Recall σύγκριση,
+- Data Quality Score πριν και μετά το επιλεγμένο plan,
+- runtime multiplier έναντι του conventional baseline,
+- το πραγματικά υλοποιημένο LangGraph workflow με validation και retry routing.
+
 ## 14. Μεθοδολογικό συμπέρασμα
 
 Η εργασία δεν εξετάζει απλώς εάν ένα LLM μπορεί να προτείνει τεχνικές preprocessing. Αναπτύσσει έναν ολοκληρωμένο Agentic AI μηχανισμό που λειτουργεί ως αυτόνομος Data Scientist μέσα σε σαφώς καθορισμένα όρια.
