@@ -157,6 +157,38 @@ AgentApplication
 - Oversampling εφαρμόζεται μόνο στο training μέρος κάθε fold.
 - Το temporal test set δεν είναι διαθέσιμο στους Agent components.
 - Κάθε iteration ξεκινά από το ίδιο αρχικό training dataset.
+- Ο `TransformationExecutor` δέχεται μόνο `ValidationResult(is_valid=True)`.
+- Κάθε executable action επιλύεται μέσω injected `TransformationFactoryRegistry`.
+- Validated παράμετρος δεν επιτρέπεται να αγνοείται από την execution factory.
+- Επιτρέπεται το πολύ ένας sampler ανά model pipeline.
+- Οι samplers ενσωματώνονται σε `imblearn.Pipeline` και ενεργοποιούνται μόνο στο
+  `fit`, ποτέ στο validation ή στο prediction.
+
+## Deterministic execution layer
+
+Η εκτέλεση διαχωρίζεται σε τρία επίπεδα:
+
+```text
+Validated TransformationPlan
+          ↓
+TransformationFactoryRegistry
+          ↓
+ModelPipelineBuilder
+          ↓
+TransformationExecutor → ExecutionResult
+```
+
+Κάθε transformation factory παράγει ένα typed execution artifact:
+
+- column transformer,
+- fold-local sampler,
+- ασφαλείς estimator parameters.
+
+Ο `ModelPipelineBuilder` εφαρμόζει μόνο actions που αντιστοιχούν στο τρέχον model
+scope, διατηρεί τη σειρά τους ανά στήλη και κλωνοποιεί τα sklearn components ώστε
+να μην υπάρχει κοινό fitted state. Ο Executor εφαρμόζει ανεξάρτητο defence-in-depth
+έλεγχο και αρνείται execution σε validation-fold ή temporal-test context, ακόμη
+και αν του δοθεί χειροκίνητα ένα φαινομενικά έγκυρο result.
 
 ## Definition of Done για Agentic components
 
@@ -171,4 +203,3 @@ AgentApplication
 - παράγει κατανοητά errors,
 - μπορεί να αντικατασταθεί χωρίς αλλαγή του υπόλοιπου graph,
 - τεκμηριώνεται στο README ή στο παρόν αρχείο.
-

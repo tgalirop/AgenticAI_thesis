@@ -134,7 +134,10 @@ class LogTransformSpecification(TransformationSpecification):
     allowed_column_kinds = frozenset({ColumnKind.NUMERIC})
 
     def validate_parameters(self, action: TransformationAction) -> Iterable[ValidationIssue]:
-        return self._reject_unknown_parameters(action, {"output_suffix"})
+        # The current executor replaces a column in-place inside its model
+        # pipeline. No parameter is accepted until a corresponding deterministic
+        # execution behaviour exists; validated parameters must never be ignored.
+        return self._reject_unknown_parameters(action, set())
 
 
 class OneHotEncodingSpecification(TransformationSpecification):

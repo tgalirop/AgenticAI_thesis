@@ -345,14 +345,55 @@ allowlist. Απορρίπτει:
 Ο Validator επιστρέφει όλα τα προβλήματα μαζί ως typed `ValidationIssue` objects,
 ώστε ο Strategy Generator να μπορεί να διορθώνει ολόκληρο το plan σε ένα retry.
 
+## Object-oriented Transformation Executor
+
+Υλοποιήθηκε ο deterministic execution layer που μετατρέπει αποκλειστικά validated
+plans σε ασφαλή model pipelines.
+
+### Βασικές κλάσεις
+
+- `TransformationFactory`: abstract interface για executable transformations,
+- `TransformationFactoryRegistry`: injected registry ασφαλών factories,
+- `ExecutionArtifact`: typed artifact για transformers, samplers ή estimator params,
+- `SafeLog1pTransformer`: ελεγχόμενος log transformer που απορρίπτει αρνητικές ή
+  μη πεπερασμένες τιμές,
+- `ModelPipelineBuilder`: κατασκευάζει model-specific pipelines,
+- `TransformationExecutor`: guarded execution entry point,
+- `ExecutionResult`: immutable audit record του κατασκευασμένου pipeline.
+
+### Υλοποιημένες factories
+
+- numeric imputation,
+- categorical imputation,
+- standard και robust scaling,
+- ασφαλής log1p transformation,
+- one-hot encoding με `handle_unknown="ignore"`,
+- class weighting,
+- random undersampling,
+- random oversampling,
+- SMOTE.
+
+### Εγγυήσεις εκτέλεσης
+
+- Ο Executor δέχεται μόνο `ValidationResult(is_valid=True)`.
+- Το plan και το execution context πρέπει να αναφέρονται στο ίδιο dataset.
+- Απαγορεύεται execution σε validation-fold και temporal-test context.
+- Τα model-scoped actions εφαρμόζονται μόνο στο αντίστοιχο μοντέλο.
+- Η σειρά των transformations διατηρείται ξεχωριστά ανά στήλη.
+- Τα sklearn components κλωνοποιούνται και δεν μοιράζονται fitted state.
+- Επιτρέπεται το πολύ ένας sampler ανά pipeline.
+- Sampling γίνεται μέσα σε `imblearn.Pipeline` και μόνο κατά το training `fit`.
+- Άγνωστη ή μη υλοποιημένη factory προκαλεί fail-closed σφάλμα.
+- Ίδιο plan και seed παράγουν ίδιες προβλέψεις στο deterministic test.
+
 ## Έλεγχοι και περιβάλλον
 
 - Εγκαταστάθηκαν όλες οι απαιτούμενες βιβλιοθήκες.
 - Επιλύθηκε η συμβατότητα LangChain/LangSmith.
 - Ρυθμίστηκε το VS Code ώστε να χρησιμοποιεί τον σωστό Python interpreter και το
   `src` import path.
-- Υπάρχουν 33 αυτοματοποιημένοι έλεγχοι.
-- Τρέχον αποτέλεσμα: `33 passed`.
+- Υπάρχουν 41 αυτοματοποιημένοι έλεγχοι.
+- Τρέχον αποτέλεσμα: `41 passed`.
 
 ## GitHub
 
@@ -369,12 +410,11 @@ https://github.com/tgalirop/AgenticAI_thesis
 
 ## Επόμενα βήματα
 
-1. Υλοποίηση object-oriented Transformation Executor.
-2. Υλοποίηση deterministic transformation classes που κατασκευάζουν ασφαλή
-   scikit-learn/imbalanced-learn pipelines.
-3. Υλοποίηση Strategy Generator και σύνδεση με LLM.
-4. Υλοποίηση ML Evaluator.
-5. Υλοποίηση feedback loop και LangGraph state.
+1. Υλοποίηση object-oriented ML Evaluator για Agent iterations.
+2. Υλοποίηση typed feedback policy και termination decisions.
+3. Υλοποίηση persistent Agent state.
+4. Υλοποίηση Strategy Generator και model-client abstraction.
+5. Σύνδεση των components με λεπτούς LangGraph nodes.
 6. Controlled data degradation scenario.
 7. Conventional vs Agentic στατιστική σύγκριση.
 
