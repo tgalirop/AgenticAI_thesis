@@ -38,10 +38,21 @@ reports/**/*.json
 reports/**/*.jsonl
 reports/**/*.csv
 reports/**/*.parquet
+# Track compact, thesis-ready aggregate evidence; keep large predictions and
+# transient per-run artifacts ignored.
+!reports/metrics/agentic_results.csv
+!reports/metrics/agentic_fold_results.csv
+!reports/metrics/degraded_conventional_results.csv
+!reports/metrics/degraded_conventional_fold_results.csv
+!reports/metrics/temporal_holdout_results.csv
+!reports/statistical_tests/paired_results.csv
+!reports/profiles/controlled_degradation.json
+!reports/transformation_plans/*.json
 figures/**/*.png
 figures/**/*.pdf
 logs/**/*.log
 logs/**/*.json
 logs/**/*.jsonl
+!logs/agentic/run_summary.json
 artifacts/
 mlruns/

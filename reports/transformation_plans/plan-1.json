@@ -1,0 +1,156 @@
+{
+  "iteration": 1,
+  "plan": {
+    "plan_id": "plan-1",
+    "dataset_id": "paysim-degraded-development-v1",
+    "iteration": 1,
+    "objective": "Enhance preprocessing to improve model performance",
+    "actions": [
+      {
+        "action_id": "impute_type_missing",
+        "transformation": "impute_categorical",
+        "columns": [
+          "type"
+        ],
+        "parameters": {
+          "strategy": "most_frequent"
+        },
+        "rationale": "Fill missing values in 'type' with the most frequent category to preserve the distribution and avoid bias in downstream models.",
+        "model_scope": "all"
+      },
+      {
+        "action_id": "one_hot_encode_type",
+        "transformation": "one_hot_encode",
+        "columns": [
+          "type"
+        ],
+        "parameters": {
+          "handle_unknown": "ignore"
+        },
+        "rationale": "Encode categorical 'type' into one-hot features; unknown categories are ignored to maintain consistency with the baseline contract.",
+        "model_scope": "all"
+      },
+      {
+        "action_id": "scale_numeric_features",
+        "transformation": "scale_numeric",
+        "columns": [
+          "amount",
+          "day",
+          "hour",
+          "log_amount",
+          "step"
+        ],
+        "parameters": {
+          "method": "standard"
+        },
+        "rationale": "Standardize numeric features to zero mean and unit variance as required by the logistic regression baseline and to improve convergence for other models.",
+        "model_scope": "all"
+      }
+    ]
+  },
+  "validation": {
+    "is_valid": true,
+    "issues": [],
+    "plan": {
+      "plan_id": "plan-1",
+      "dataset_id": "paysim-degraded-development-v1",
+      "iteration": 1,
+      "objective": "Enhance preprocessing to improve model performance",
+      "actions": [
+        {
+          "action_id": "impute_type_missing",
+          "transformation": "impute_categorical",
+          "columns": [
+            "type"
+          ],
+          "parameters": {
+            "strategy": "most_frequent"
+          },
+          "rationale": "Fill missing values in 'type' with the most frequent category to preserve the distribution and avoid bias in downstream models.",
+          "model_scope": "all"
+        },
+        {
+          "action_id": "one_hot_encode_type",
+          "transformation": "one_hot_encode",
+          "columns": [
+            "type"
+          ],
+          "parameters": {
+            "handle_unknown": "ignore"
+          },
+          "rationale": "Encode categorical 'type' into one-hot features; unknown categories are ignored to maintain consistency with the baseline contract.",
+          "model_scope": "all"
+        },
+        {
+          "action_id": "scale_numeric_features",
+          "transformation": "scale_numeric",
+          "columns": [
+            "amount",
+            "day",
+            "hour",
+            "log_amount",
+            "step"
+          ],
+          "parameters": {
+            "method": "standard"
+          },
+          "rationale": "Standardize numeric features to zero mean and unit variance as required by the logistic regression baseline and to improve convergence for other models.",
+          "model_scope": "all"
+        }
+      ]
+    }
+  },
+  "assessment": {
+    "plan_id": "plan-1",
+    "iteration": 1,
+    "validation_valid": true,
+    "execution_status": "success",
+    "model_outcomes": [
+      {
+        "model_name": "logistic_regression",
+        "status": "success",
+        "primary_metric": 0.5491945491770027,
+        "recall": 0.8793728023664675,
+        "precision": 0.2927154143324028,
+        "fit_seconds": 8.380609499872662,
+        "predict_seconds": 0.646651400020346
+      },
+      {
+        "model_name": "decision_tree",
+        "status": "success",
+        "primary_metric": 0.6102480502450799,
+        "recall": 0.7424913955089208,
+        "precision": 0.6191265159719168,
+        "fit_seconds": 13.847171700152103,
+        "predict_seconds": 0.7629803999443538
+      },
+      {
+        "model_name": "random_forest",
+        "status": "success",
+        "primary_metric": 0.8313836698492895,
+        "recall": 0.7445037999293036,
+        "precision": 0.7481919065592832,
+        "fit_seconds": 68.74510709993774,
+        "predict_seconds": 2.653463299793657
+      }
+    ],
+    "data_quality_score": 0.9997227958807469,
+    "preprocessing_seconds": 0.04824420000659302,
+    "peak_memory_bytes": null
+  },
+  "feedback": {
+    "action": "ACCEPT",
+    "reason_code": "improvement_accepted",
+    "reason": "The candidate provides an acceptable benefit without violating guardrails.",
+    "plan_id": "plan-1",
+    "iteration": 1,
+    "primary_metric_delta": 0.0006036918373004685,
+    "quality_delta": 0.001660914681192227,
+    "runtime_multiplier": 1.1239179903870666,
+    "is_new_best": true,
+    "recommendations": []
+  },
+  "artifacts": [],
+  "warnings": [],
+  "errors": []
+}

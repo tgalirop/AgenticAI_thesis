@@ -3,8 +3,37 @@ max_iterations: 3
 structured_output_only: true
 allow_arbitrary_code_execution: false
 
+# Controlled MCAR degradation is applied only to a reproducible copy of the
+# development sample. The source Parquet and temporal holdout remain untouched.
+degradation:
+  random_seed: 42
+  missing_rates:
+    type: 0.05
+
+# Groq Free Tier executes the open-weight model remotely. The Agent sends only
+# compact profiles/metrics, never the 6.5-million-row transaction table.
+llm:
+  provider: groq
+  model: openai/gpt-oss-20b
+  base_url: https://api.groq.com/openai/v1
+  api_key_environment_variable: GROQ_API_KEY
+  timeout_seconds: 120.0
+  temperature: 0.0
+  reasoning_effort: medium
+  max_rate_limit_retries: 2
+
 stopping:
-  no_improvement_patience: 2
+  no_improvement_patience: 3
+
+feedback:
+  minimum_primary_improvement: 0.005
+  minimum_quality_improvement: 0.0001
+  maximum_recall_drop: 0.02
+  maximum_precision_drop: 0.02
+  maximum_runtime_multiplier: 3.0
+  max_invalid_strategies: 2
+  max_execution_errors: 2
+  require_all_models_successful: true
 
 # Only registered declarative actions can reach the deterministic Executor.
 allowed_transformations:
@@ -13,5 +42,3 @@ allowed_transformations:
   - scale_numeric
   - log_transform
   - one_hot_encode
-  - class_weight
-  - resample_classes

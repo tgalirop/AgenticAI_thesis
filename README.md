@@ -486,7 +486,100 @@ temporal holdout, όπου διατηρείται η φυσική κατανομ
 - Μέτρηση χρόνου εκτέλεσης και χρήσης πόρων.
 - Πλήρως αναπαραγώγιμο repository με seeds και package versions.
 
-## 13. Μεθοδολογικό συμπέρασμα
+## 13. Open-weight LLM μέσω Groq Free Tier
+
+Ο Strategy Generator χρησιμοποιεί το `openai/gpt-oss-20b` μέσω του Groq Free Tier. Το πλήρες
+dataset δεν αποστέλλεται στο LLM. Το μοντέλο λαμβάνει αποκλειστικά compact schema,
+δείκτες ποιότητας, baseline metrics και feedback προηγούμενων iterations.
+
+Η σύνδεση παραμένει αντικαταστάσιμη:
+
+```text
+StrategyGenerator
+      │
+ModelClientProtocol
+      ├── GroqModelClient   → openai/gpt-oss-20b (κύριο)
+      ├── OllamaModelClient → προαιρετικό local fallback
+      └── FakeModelClient   → deterministic unit tests
+```
+
+Το API key δημιουργείται στο Groq Console και ορίζεται μόνο στο environment:
+
+```powershell
+$env:GROQ_API_KEY = "your-free-tier-key"
+```
+
+Το πραγματικό key δεν γράφεται σε YAML, source code, logs ή Agent state και τα `.env`
+αρχεία αγνοούνται από το Git. Οι παράμετροι βρίσκονται στο `configs/agent.yaml`.
+Το Groq καλείται μέσω HTTPS, με temperature `0`, JSON Schema structured output και
+χωρίς δυνατότητα παραγωγής/εκτέλεσης αυθαίρετου κώδικα. Η έξοδος επικυρώνεται ξανά
+ως immutable `TransformationPlan` πριν φτάσει στον Validator και στον Executor.
+Σε HTTP 429 ο client κάνει μόνο περιορισμένα retries και τελικά σταματά μέχρι το
+Free Tier quota reset· δεν υπάρχει αυτόματη μετάβαση σε πληρωμένο tier.
+
+### LangGraph Agent workflow
+
+Το LangGraph χρησιμοποιείται αποκλειστικά για orchestration. Κάθε node είναι μικρή
+κλάση με μία ευθύνη και λαμβάνει τις υπηρεσίες του μέσω dependency injection:
+
+```text
+START
+  ↓
+prepare_iteration → generate_strategy → validate_strategy
+                                         ├── valid → evaluate_candidate
+                                         └── invalid → assess_invalid_strategy
+                                                           ↓
+                         decide_feedback → record_iteration/checkpoint
+                                  ↑                 ├── RETRY
+                                  └─────────────────┘
+                                                    └── ACCEPT/STOP → END
+```
+
+Το graph state περιέχει μόνο immutable/serializable domain objects και compact
+metrics. Raw rows, fitted pipelines, estimators και fold predictions παραμένουν
+στον injected `AgentCandidateEvaluator`. Ο evaluator συνθέτει τον ασφαλή Executor,
+τον quality evaluator και τον ML evaluator πάνω στα κοινά cross-validation folds.
+
+Η πρόσβαση σε temporal-test context απορρίπτεται πριν κληθεί το LLM. Invalid plans
+δεν φτάνουν ποτέ στον Executor. Κάθε ολοκληρωμένο iteration αποθηκεύεται atomically
+με plan, validation issues, assessment, feedback, warnings και execution errors.
+
+### Πλήρης εκτέλεση Agentic πειράματος
+
+Το production experiment εκτελείται με:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m experiments.run_agentic
+```
+
+Η τελική πραγματική εκτέλεση χρησιμοποίησε 72.149 development observations, 5×5
+shared repeated-stratified folds και controlled MCAR missingness σε 3.607 τιμές της
+στήλης `type`. Ο Agent έκανε `ACCEPT` στο πρώτο iteration με plan:
+
+- categorical most-frequent imputation στο `type`,
+- one-hot encoding με ασφαλή unknown-category handling,
+- standard scaling των numeric features για Logistic Regression.
+
+Το Data Quality Score αυξήθηκε από `0,998062` σε `0,999723` (`+0,001661`). Η μέση
+primary-metric μεταβολή έναντι του degraded conventional baseline ήταν `+0,000604`,
+με runtime multiplier `1,124`, χωρίς παραβίαση Recall/Precision guardrails.
+
+Στο untouched temporal holdout τα PR-AUC αποτελέσματα ήταν:
+
+| Model | Conventional | Agentic | Διαφορά |
+|---|---:|---:|---:|
+| Logistic Regression | 0,205972 | 0,206009 | +0,000037 |
+| Decision Tree | 0,080481 | 0,075425 | -0,005056 |
+| Random Forest | 0,353971 | 0,355597 | +0,001626 |
+
+Τα αποτελέσματα δείχνουν ότι η βελτίωση ποιότητας δεν συνεπάγεται ομοιόμορφη
+βελτίωση κάθε classifier. Η επίδραση ήταν ουσιαστικά ουδέτερη στη Logistic
+Regression, θετική στο Random Forest PR-AUC και αρνητική στο Decision Tree. Τα
+πλήρη fold metrics, temporal metrics και Holm-corrected Wilcoxon tests βρίσκονται
+στο `reports/`.
+
+## 14. Μεθοδολογικό συμπέρασμα
 
 Η εργασία δεν εξετάζει απλώς εάν ένα LLM μπορεί να προτείνει τεχνικές preprocessing. Αναπτύσσει έναν ολοκληρωμένο Agentic AI μηχανισμό που λειτουργεί ως αυτόνομος Data Scientist μέσα σε σαφώς καθορισμένα όρια.
 

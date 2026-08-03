@@ -10,6 +10,8 @@ PyYAML>=6.0,<7.0
 joblib>=1.4,<2.0
 psutil>=6.0,<8.0
 pytest>=8.0,<9.0
+pydantic>=2.8,<3.0
+python-dotenv>=1.0,<2.0
 
 # Phase 2 — Agentic AI
 langgraph>=0.2,<1.0

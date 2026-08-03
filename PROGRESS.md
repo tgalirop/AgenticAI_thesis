@@ -445,14 +445,73 @@ plans σε ασφαλή model pipelines.
 Η επανεκτέλεση επιβεβαίωσε ότι η νέα κοινή υποδομή folds δεν άλλαξε τα
 επιστημονικά αποτελέσματα.
 
+## Feedback Policy, Agent State και Checkpoints
+
+### Deterministic FeedbackPolicy
+
+Υλοποιήθηκαν:
+
+- `ModelOutcome`,
+- `CandidateAssessment`,
+- `FeedbackPolicyConfig`,
+- `FeedbackDecision`,
+- `FeedbackAction`,
+- `FeedbackPolicy`.
+
+Η policy συγκρίνει κάθε candidate με το conventional baseline ανά μοντέλο και
+εξετάζει:
+
+- μεταβολή της κύριας μετρικής,
+- Recall και Precision guardrails,
+- Data Quality Score,
+- συνολικό runtime multiplier,
+- model/fold evaluation failures,
+- invalid strategies,
+- recoverable και fatal execution errors,
+- συνεχόμενα iterations χωρίς βελτίωση,
+- μέγιστο πλήθος iterations.
+
+Οι αποφάσεις είναι `ACCEPT`, `RETRY`, `STOP_NO_IMPROVEMENT`,
+`STOP_MAX_ITERATIONS`, `STOP_INVALID_STRATEGIES` και `STOP_EXECUTION_ERROR`. Όλα τα
+thresholds βρίσκονται στο `configs/agent.yaml`.
+
+### Immutable AgentState
+
+Υλοποιήθηκαν:
+
+- `AgentState`,
+- `IterationRecord`,
+- `ArtifactReference`,
+- `AgentRunStatus`,
+- `AgentStateManager`.
+
+Το conventional baseline χρησιμοποιεί το δεσμευμένο iteration `0` και τα Agent
+iterations ξεκινούν από `1`. Ο State Manager ελέγχει sequential iterations,
+dataset identity, συμφωνία plan/assessment/feedback, maximum iterations και
+απαγορεύει αλλαγές μετά από terminal decision.
+
+Το state δεν περιέχει fitted sklearn objects. Κρατά μόνο serializable domain
+models και paths/checksums των εξωτερικών artifacts.
+
+### Atomic checkpoints
+
+Δημιουργήθηκαν:
+
+- `CheckpointStoreProtocol`,
+- `JsonCheckpointStore`.
+
+Τα checkpoints γράφονται atomically ως UTF-8 JSON, επικυρώνονται ξανά κατά το
+load και προστατεύονται από unsafe run IDs και path traversal. Το interface μπορεί
+αργότερα να αντικατασταθεί από LangGraph checkpointer.
+
 ## Έλεγχοι και περιβάλλον
 
 - Εγκαταστάθηκαν όλες οι απαιτούμενες βιβλιοθήκες.
 - Επιλύθηκε η συμβατότητα LangChain/LangSmith.
 - Ρυθμίστηκε το VS Code ώστε να χρησιμοποιεί τον σωστό Python interpreter και το
   `src` import path.
-- Υπάρχουν 49 αυτοματοποιημένοι έλεγχοι.
-- Τρέχον αποτέλεσμα: `49 passed`.
+- Υπάρχουν 67 αυτοματοποιημένοι έλεγχοι.
+- Τρέχον αποτέλεσμα: `67 passed`.
 
 ## GitHub
 
@@ -467,14 +526,117 @@ https://github.com/tgalirop/AgenticAI_thesis
 - `a7c54b4` — Build Phase 1 data pipeline and conventional baseline
 - `528dcc7` — Align research questions with official thesis
 
+## Open-weight LLM μέσω Groq Free Tier και Strategy Generator
+
+Υλοποιήθηκαν:
+
+- `ModelClientProtocol` ως provider-neutral interface,
+- `GroqModelClient` για το `openai/gpt-oss-20b` μέσω Groq Free Tier,
+- environment-only διαχείριση του `GROQ_API_KEY`,
+- περιορισμένα retries και καθαρό σταμάτημα σε εξάντληση δωρεάν quota,
+- `OllamaModelClient` ως προαιρετικό local fallback,
+- `FakeModelClient` για deterministic και δωρεάν tests,
+- `StrategyPromptContext` και `StrategyPromptProvider`,
+- `TransformationPlanParser` με strict Pydantic validation,
+- `StrategyGenerator` με dependency injection και identity checks,
+- typed φόρτωση του LLM configuration από `configs/agent.yaml`.
+
+Το μοντέλο λαμβάνει μόνο schema, quality/baseline metrics και προηγούμενο feedback,
+όχι raw συναλλαγές. Η έξοδος περιορίζεται από JSON Schema, ελέγχεται ξανά ως
+`TransformationPlan` και δεν μπορεί να περιέχει αυθαίρετο executable code.
+
+### LangGraph orchestration
+
+Υλοποιήθηκαν επίσης:
+
+- `AgentGraphState` χωρίς raw data ή fitted objects,
+- `AgentGraphDependencies` για dependency injection,
+- επτά class-based nodes με μία ευθύνη το καθένα,
+- conditional routing για valid/invalid plan και retry/termination,
+- `AgentWorkflow` facade με domain-derived recursion limit,
+- atomic checkpoint μετά από κάθε πλήρες iteration,
+- typed και auditable execution-error handling,
+- `AgentCandidateEvaluator` που συνθέτει Executor, quality evaluator και ML evaluator,
+- `PlanQualityEvaluatorProtocol` ως boundary για το controlled-degradation πείραμα.
+
+Τα end-to-end graph tests καλύπτουν άμεσο `ACCEPT`, invalid-plan `RETRY`, απαγόρευση
+temporal-test context πριν από το LLM και `STOP_EXECUTION_ERROR` μετά από διαδοχικές
+recoverable failures.
+
+### Πραγματικό Groq smoke test
+
+Εκτελέστηκε πραγματική Free Tier κλήση στο `openai/gpt-oss-20b`. Ο αρχικός έλεγχος
+εντόπισε ότι το edge-security layer απέρριπτε το default `Python-urllib` signature.
+Προστέθηκε σταθερό application `User-Agent` στον `GroqModelClient` και το `/models`
+endpoint επιβεβαιώθηκε με HTTP 200.
+
+Η πρώτη πραγματική στρατηγική αποκάλυψε επίσης ότι το prompt περιείχε τα επιτρεπτά
+transformation names αλλά όχι τα ακριβή parameter contracts. Ο Validator την
+απέρριψε σωστά. Προστέθηκε injectable catalog με column/parameter contracts για
+κάθε allowlisted transformation και η επόμενη πραγματική κλήση ολοκληρώθηκε:
+
+```text
+GROQ_CALL_OK
+MODEL=openai/gpt-oss-20b
+ACTIONS=6
+VALID=True
+```
+
+Το API key χρησιμοποιήθηκε μόνο ως process environment variable και δεν
+αποθηκεύτηκε σε source, configuration, logs ή repository files.
+
+## Controlled degradation και τελική Agentic εκτέλεση
+
+Υλοποιήθηκαν:
+
+- `ControlledDataDegrader` με deterministic MCAR injection και προστασία target,
+- `TransformationAwarePlanQualityEvaluator`,
+- `DataFrameQualityReportBuilder`,
+- `AgenticPlanBenchmark`,
+- `TemporalHoldoutComparator`,
+- `PairedPipelineComparator` με Wilcoxon και Holm-Bonferroni correction,
+- πλήρες `AgenticExperimentRunner`/CLI,
+- ασφαλής `.env` φόρτωση μέσω `python-dotenv`,
+- compact aggregate artifacts κατάλληλα για GitHub.
+
+Η πρώτη exploratory πραγματική εκτέλεση αποκάλυψε υπερβολικά ευρύ Agent scope:
+sampling actions μείωσαν σημαντικά το Precision και απορρίφθηκαν σωστά από τα
+guardrails. Το ενεργό allowlist περιορίστηκε στις data-quality/feature preprocessing
+ενέργειες και το prompt απέκτησε per-column missingness και baseline-pipeline
+contract. Η τελική εκτέλεση ολοκληρώθηκε σε 311,33 δευτερόλεπτα:
+
+```text
+sample rows: 72.149
+controlled missing type values: 3.607
+iterations: 1
+termination: ACCEPT
+selected plan: plan-1
+quality score: 0,998062 → 0,999723
+mean primary metric delta: +0,000604
+runtime multiplier: 1,124
+```
+
+Temporal PR-AUC:
+
+| Model | Conventional | Agentic |
+|---|---:|---:|
+| Logistic Regression | 0,205972 | 0,206009 |
+| Decision Tree | 0,080481 | 0,075425 |
+| Random Forest | 0,353971 | 0,355597 |
+
+Η τελική ερμηνεία παραμένει μικτή: η ποιότητα βελτιώθηκε με μικρό υπολογιστικό
+κόστος, αλλά η επίδραση στην predictive performance εξαρτάται από τον classifier.
+
+Το συνολικό test suite αυξήθηκε από 67 σε 85 tests και ολοκληρώνεται επιτυχώς:
+
+```text
+85 passed
+```
+
 ## Επόμενα βήματα
 
-1. Υλοποίηση typed feedback policy και termination decisions.
-2. Υλοποίηση persistent Agent state και iteration history.
-3. Υλοποίηση Strategy Generator και model-client abstraction.
-4. Σύνδεση των components με λεπτούς LangGraph nodes.
-5. Controlled data degradation scenario.
-6. Conventional vs Agentic στατιστική σύγκριση.
+1. Ενσωμάτωση των τελικών πινάκων και της ερμηνείας στο `fintech_thesis.docx`.
+2. Commit και push του ολοκληρωμένου κώδικα και των compact aggregate artifacts.
 
 Όλα τα παραπάνω Agentic components θα υλοποιηθούν ως συνεργαζόμενες κλάσεις και
 όχι ως monolithic scripts ή tightly coupled functions.

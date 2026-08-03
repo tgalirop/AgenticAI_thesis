@@ -212,6 +212,128 @@ target σειράς. Έτσι, ένα σύνολο folds δεν μπορεί ν�
 υποδομή folds και metrics. Η μόνη πειραματική διαφορά παραμένει η στρατηγική
 preprocessing.
 
+## Feedback, state και persistence
+
+Το `FeedbackPolicy` είναι deterministic service. Το LLM δεν αποφασίζει αν μία
+στρατηγική πέτυχε και δεν ελέγχει τον τερματισμό του loop. Η policy συγκρίνει
+per-model primary metric, Recall και Precision με το conventional baseline και
+συνυπολογίζει Data Quality Score, χρόνο εκτέλεσης, validation/execution failures
+και ιστορικό προηγούμενων προσπαθειών.
+
+Οι thresholds παρέχονται μέσω immutable `FeedbackPolicyConfig`. Οι δυνατές
+αποφάσεις είναι:
+
+```text
+ACCEPT
+RETRY
+STOP_NO_IMPROVEMENT
+STOP_MAX_ITERATIONS
+STOP_INVALID_STRATEGIES
+STOP_EXECUTION_ERROR
+```
+
+Το `AgentState` είναι immutable και πλήρως serializable. Δεν περιέχει fitted
+pipelines, model clients ή άλλες μη αναπαραγώγιμες Python αναφορές. Αποθηκεύει
+typed summaries, plans, validation, feedback και artifact references. Μόνο ο
+`AgentStateManager` επιτρέπεται να δημιουργεί νέα state transitions και ελέγχει
+iteration sequence, dataset identity, plan/feedback coherence και terminal state.
+
+Η persistence εξαρτάται από το `CheckpointStoreProtocol`. Η αρχική υλοποίηση
+`JsonCheckpointStore` γράφει atomic UTF-8 JSON checkpoints, επικυρώνει ξανά το
+state κατά το load και προστατεύει από path traversal. Μελλοντικός LangGraph
+checkpointer μπορεί να αντικαταστήσει το store χωρίς αλλαγή της domain λογικής.
+
+## Strategy Generator και τοπικό LLM
+
+Το LLM integration ακολουθεί dependency inversion. Ο `StrategyGenerator` γνωρίζει
+μόνο το `ModelClientProtocol` και συνεπώς δεν εξαρτάται από Groq, Ollama, LangChain ή
+συγκεκριμένο model provider. Ο `GroqModelClient` υλοποιεί το κύριο interface για το
+`openai/gpt-oss-20b` στο Free Tier, ο `OllamaModelClient` παραμένει προαιρετικό local
+fallback και ο `FakeModelClient` παρέχει deterministic responses
+στα tests χωρίς server, δίκτυο ή inference κόστος.
+
+```text
+StrategyPromptContext
+        ↓
+StrategyPromptProvider
+        ↓
+ModelClientProtocol → GroqModelClient → openai/gpt-oss-20b
+                    ↘ OllamaModelClient (optional fallback)
+        ↓
+TransformationPlanParser
+        ↓
+TransformationPlan → Validator → Executor
+```
+
+Το prompt περιλαμβάνει μόνο compact metadata και metrics. Δεν περιλαμβάνει raw
+PaySim rows και δεν επιτρέπεται πρόσβαση στο temporal holdout. Το endpoint λαμβάνει
+το JSON Schema του `TransformationPlan`, αλλά η απάντηση θεωρείται πάντοτε μη
+έμπιστη: περνά ξανά από strict Pydantic validation (`extra="forbid"`) και από
+ελέγχους dataset/iteration identity. Το LLM προτείνει μόνο allowlisted declarative
+actions· δεν παράγει ούτε εκτελεί Python ή shell code.
+
+## LangGraph orchestration
+
+Το `AgentWorkflow` είναι το public facade του graph. Το `AgentGraphBuilder` συναρμολογεί
+αντικαταστάσιμα class-based nodes και το `AgentGraphDependencies` συγκεντρώνει όλες
+τις injected υπηρεσίες. Κανένα node δεν κατασκευάζει μόνο του model client,
+validator, evaluator, policy ή checkpoint store.
+
+Nodes:
+
+1. `PrepareIterationNode`: ελέγχει lifecycle, dataset identity, iteration budget και
+   επιτρέπει αποκλειστικά development context.
+2. `GenerateStrategyNode`: δημιουργεί compact prompt context και καλεί τον
+   provider-neutral Strategy Generator.
+3. `ValidateStrategyNode`: εφαρμόζει allowlist, schema, parameter και leakage rules.
+4. `InvalidStrategyAssessmentNode`: μετατρέπει invalid plan σε typed assessment,
+   χωρίς execution.
+5. `EvaluateCandidateNode`: καλεί το injected `CandidateEvaluatorProtocol` και
+   μετατρέπει μόνο αναμενόμενα execution failures σε typed feedback.
+6. `DecideFeedbackNode`: εφαρμόζει αποκλειστικά deterministic `FeedbackPolicy`.
+7. `RecordIterationNode`: δημιουργεί immutable audit record και atomic checkpoint.
+
+Το routing βασίζεται μόνο σε typed validation/status values. Δεν ζητείται από το LLM
+να αποφασίσει routing ή τερματισμό. Το recursion limit παράγεται από το domain
+`max_iterations`, προσφέροντας πρόσθετη προστασία από ακούσιο infinite loop.
+
+## Candidate evaluation boundary
+
+Ο `AgentCandidateEvaluator` κρατά εκτός graph state:
+
+- development feature matrix και target,
+- immutable shared fold set,
+- estimators και fitted pipeline clones,
+- detailed fold predictions.
+
+Για κάθε valid plan καλεί τον `TransformationExecutor`, τον
+`MachineLearningEvaluator` και ένα injected `PlanQualityEvaluatorProtocol`, και
+επιστρέφει μόνο `CandidateAssessment`. Η concrete quality υλοποίηση θα συνδεθεί με
+το controlled-degradation πείραμα, ώστε το Data Quality Score να βασίζεται σε
+μετρημένη post-transformation ποιότητα και όχι σε εκτίμηση του LLM.
+
+## Controlled degradation και experiment lifecycle
+
+Το `ControlledDataDegrader` εφαρμόζει deterministic MCAR missingness μόνο σε deep
+copy του reproducible development sample. Target, source Parquet και temporal
+holdout προστατεύονται. Ο `TransformationAwarePlanQualityEvaluator` εφαρμόζει σε
+αντίγραφο μόνο quality-relevant actions (numeric/categorical imputation) και
+επανυπολογίζει τον Data Quality Score· scaling, encoding και sampling δεν
+βαφτίζονται λανθασμένα ως quality improvements.
+
+Ο `AgenticExperimentRunner` επιβάλλει την ακολουθία:
+
+```text
+shared sample → controlled degradation → conventional shared-fold baseline
+→ LangGraph search → locked accepted plan → Agentic shared-fold benchmark
+→ paired Wilcoxon/Holm tests → one-time temporal holdout evaluation
+```
+
+Το temporal Parquet δεν διαβάζεται πριν ολοκληρωθεί το graph και επιλεγεί το plan.
+Τα μεγάλα OOF/temporal predictions και checkpoints παραμένουν εκτός Git, ενώ τα
+compact aggregate metrics, statistical tests, final plan και run summary είναι
+trackable για αναπαραγωγιμότητα.
+
 ## Definition of Done για Agentic components
 
 Ένα component θεωρείται ολοκληρωμένο μόνο όταν:

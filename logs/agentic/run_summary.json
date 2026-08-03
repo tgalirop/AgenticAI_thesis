@@ -1,0 +1,16 @@
+{
+  "run_id": "agentic_20260803T154644Z",
+  "sample_rows": 72149,
+  "degradation": {
+    "type": 3607
+  },
+  "initial_data_quality_score": 0.9980618811995546,
+  "selected_data_quality_score": 0.9997227958807469,
+  "selected_quality_delta": 0.001660914681192227,
+  "selected_primary_metric_delta": 0.0006036918373004685,
+  "selected_runtime_multiplier": 1.1239179903870666,
+  "iterations": 1,
+  "termination_action": "ACCEPT",
+  "selected_plan_id": "plan-1",
+  "elapsed_seconds": 311.3252832000144
+}
