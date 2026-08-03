@@ -1,0 +1,11 @@
+raw_csv_path: data/raw/paysim.csv
+parquet_path: data/processed/paysim.parquet
+development_path: data/splits/development.parquet
+temporal_test_path: data/splits/temporal_test.parquet
+
+target_column: isFraud
+time_column: step
+
+temporal_test_fraction: 0.20
+random_seed: 42
+

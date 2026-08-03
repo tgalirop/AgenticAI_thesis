@@ -1,0 +1,8 @@
+# Phase 2 configuration. Values will be finalized before Agent implementation.
+max_iterations: 3
+structured_output_only: true
+allow_arbitrary_code_execution: false
+
+stopping:
+  no_improvement_patience: 2
+

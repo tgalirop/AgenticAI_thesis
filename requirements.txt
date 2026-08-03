@@ -1,0 +1,20 @@
+polars>=1.0,<2.0
+pyarrow>=16.0,<26.0
+pandas>=2.2,<3.0
+numpy>=1.26,<3.0
+scikit-learn>=1.5,<2.0
+imbalanced-learn>=0.12,<1.0
+scipy>=1.13,<2.0
+matplotlib>=3.9,<4.0
+PyYAML>=6.0,<7.0
+joblib>=1.4,<2.0
+psutil>=6.0,<8.0
+pytest>=8.0,<9.0
+
+# Phase 2 — Agentic AI
+langgraph>=0.2,<1.0
+langchain-core>=0.3,<1.0
+# Keep compatibility with the LangChain 0.3 series that is already used in the
+# local research environment.  Newer LangSmith major/minor lines are not accepted
+# by that LangChain release.
+langsmith>=0.3.45,<0.4
