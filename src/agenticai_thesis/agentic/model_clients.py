@@ -86,7 +86,7 @@ class GroqModelClient:
         user_prompt: str,
         json_schema: Mapping[str, Any],
     ) -> JsonObject:
-        """Request schema-guided JSON and retry only Free Tier rate limits."""
+        """Request JSON and retry only explicitly recoverable provider failures."""
 
         api_key = os.environ.get(self._config.api_key_environment_variable)
         if not api_key:
@@ -138,13 +138,22 @@ class GroqModelClient:
                     envelope = json.loads(response.read().decode("utf-8"))
                 return self._parse_response(envelope)
             except error.HTTPError as exc:
+                details = exc.read().decode("utf-8", errors="replace")
                 if exc.code == 429 and attempt < self._config.max_rate_limit_retries:
                     # Respect the provider hint but cap the wait.  Repeated 429s
                     # fail explicitly instead of looping or moving to a paid tier.
                     retry_after = float(exc.headers.get("Retry-After", "1"))
                     time.sleep(min(max(retry_after, 0.0), 30.0))
                     continue
-                details = exc.read().decode("utf-8", errors="replace")
+                # Groq can occasionally reject the model's own generated output
+                # before returning a completion. A fresh deterministic request
+                # is safe and bounded; unrelated client errors are never retried.
+                if (
+                    exc.code == 400
+                    and "json_validate_failed" in details
+                    and attempt < self._config.max_rate_limit_retries
+                ):
+                    continue
                 if exc.code == 429:
                     raise ModelClientError(
                         "Groq Free Tier rate limit reached; wait for the quota reset."
@@ -157,7 +166,7 @@ class GroqModelClient:
             except (TimeoutError, json.JSONDecodeError) as exc:
                 raise ModelClientError("Groq returned no valid JSON response envelope") from exc
 
-        raise ModelClientError("Groq request failed after rate-limit retries")
+        raise ModelClientError("Groq request failed after recoverable-error retries")
 
     @staticmethod
     def _parse_response(envelope: Any) -> JsonObject:

@@ -1,4 +1,4 @@
-# Phase 2 configuration. Values will be finalized before Agent implementation.
+# Final reproducible configuration for the LangGraph Agentic experiment.
 max_iterations: 3
 structured_output_only: true
 allow_arbitrary_code_execution: false

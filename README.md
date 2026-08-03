@@ -546,12 +546,32 @@ metrics. Raw rows, fitted pipelines, estimators και fold predictions παρα
 
 ### Πλήρης εκτέλεση Agentic πειράματος
 
-Το production experiment εκτελείται με:
+Το ενιαίο, fail-fast production workflow εκτελεί διαδοχικά dataset preparation,
+conventional benchmark και LangGraph Agentic benchmark:
+
+```powershell
+$env:PYTHONPATH = "src"
+python -m experiments.run_full_experiment
+```
+
+Όταν τα immutable temporal partitions υπάρχουν ήδη, μπορούν να εκτελεστούν μόνο
+τα υπολογιστικά πειραματικά στάδια χωρίς νέα μετατροπή του raw CSV:
+
+```powershell
+python -m experiments.run_full_experiment --stages conventional agentic
+```
+
+Για μεμονωμένη επανάληψη μόνο του Agentic πειράματος:
 
 ```powershell
 $env:PYTHONPATH = "src"
 python -m experiments.run_agentic
 ```
+
+Ο `FullExperimentRunner` είναι class-based coordinator. Ελέγχει configurations
+και dataset prerequisites πριν την εκτέλεση, καλεί κάθε εξειδικευμένο runner σε
+ξεχωριστό process με τον ενεργό Python interpreter και σταματά αμέσως αν κάποιο
+στάδιο αποτύχει, ώστε να μη χρησιμοποιηθούν ελλιπή ή παλιά artifacts.
 
 Η τελική πραγματική εκτέλεση χρησιμοποίησε 72.149 development observations, 5×5
 shared repeated-stratified folds και controlled MCAR missingness σε 3.607 τιμές της
@@ -563,7 +583,7 @@ shared repeated-stratified folds και controlled MCAR missingness σε 3.607 �
 
 Το Data Quality Score αυξήθηκε από `0,998062` σε `0,999723` (`+0,001661`). Η μέση
 primary-metric μεταβολή έναντι του degraded conventional baseline ήταν `+0,000604`,
-με runtime multiplier `1,124`, χωρίς παραβίαση Recall/Precision guardrails.
+με runtime multiplier `1,189`, χωρίς παραβίαση Recall/Precision guardrails.
 
 Στο untouched temporal holdout τα PR-AUC αποτελέσματα ήταν:
 

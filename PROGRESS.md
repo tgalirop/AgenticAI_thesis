@@ -603,17 +603,17 @@ VALID=True
 sampling actions μείωσαν σημαντικά το Precision και απορρίφθηκαν σωστά από τα
 guardrails. Το ενεργό allowlist περιορίστηκε στις data-quality/feature preprocessing
 ενέργειες και το prompt απέκτησε per-column missingness και baseline-pipeline
-contract. Η τελική εκτέλεση ολοκληρώθηκε σε 311,33 δευτερόλεπτα:
+contract. Η τελική reproducibility εκτέλεση ολοκληρώθηκε σε 318,83 δευτερόλεπτα:
 
 ```text
 sample rows: 72.149
 controlled missing type values: 3.607
 iterations: 1
 termination: ACCEPT
-selected plan: plan-1
+selected plan: plan-001
 quality score: 0,998062 → 0,999723
 mean primary metric delta: +0,000604
-runtime multiplier: 1,124
+runtime multiplier: 1,189
 ```
 
 Temporal PR-AUC:
@@ -627,16 +627,31 @@ Temporal PR-AUC:
 Η τελική ερμηνεία παραμένει μικτή: η ποιότητα βελτιώθηκε με μικρό υπολογιστικό
 κόστος, αλλά η επίδραση στην predictive performance εξαρτάται από τον classifier.
 
-Το συνολικό test suite αυξήθηκε από 67 σε 85 tests και ολοκληρώνεται επιτυχώς:
+Το συνολικό test suite αυξήθηκε από 67 σε 93 tests και ολοκληρώνεται επιτυχώς:
 
 ```text
-85 passed
+93 passed
 ```
 
-## Επόμενα βήματα
+## Τελική ολοκλήρωση κώδικα
+
+- Το κενό `experiments/run_full_experiment.py` αντικαταστάθηκε από τον
+  αντικειμενοστρεφή `FullExperimentRunner`.
+- Ο orchestrator εκτελεί με σταθερή σειρά τα στάδια `data`, `conventional` και
+  `agentic`, χωρίς να αντιγράφει την εξειδικευμένη λογική τους.
+- Υποστηρίζεται ασφαλής επιλογή υποσυνόλου σταδίων για επανάληψη πειραμάτων πάνω
+  στα ήδη παραχθέντα immutable temporal partitions.
+- Προστέθηκαν preflight checks, fail-fast subprocess execution και έξι unit tests
+  για σειρά σταδίων, forwarding configurations και λανθασμένες επιλογές.
+- Ο Groq client κάνει περιορισμένο retry όταν ο provider απορρίψει το JSON που
+  παρήγαγε το ίδιο το μοντέλο (`json_validate_failed`), χωρίς να επαναλαμβάνει
+  άσχετα HTTP 400 errors.
+
+## Επόμενο στάδιο: συγγραφή
 
 1. Ενσωμάτωση των τελικών πινάκων και της ερμηνείας στο `fintech_thesis.docx`.
-2. Commit και push του ολοκληρωμένου κώδικα και των compact aggregate artifacts.
+2. Περιγραφή αρχιτεκτονικής, μεθοδολογίας, αποτελεσμάτων και περιορισμών.
+3. Ρητή απάντηση στα δύο επίσημα ερευνητικά ερωτήματα.
 
-Όλα τα παραπάνω Agentic components θα υλοποιηθούν ως συνεργαζόμενες κλάσεις και
-όχι ως monolithic scripts ή tightly coupled functions.
+Όλα τα Agentic components έχουν υλοποιηθεί ως συνεργαζόμενες κλάσεις και όχι ως
+monolithic scripts ή tightly coupled functions.

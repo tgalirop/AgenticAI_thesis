@@ -1,0 +1,156 @@
+{
+  "iteration": 1,
+  "plan": {
+    "plan_id": "plan-001",
+    "dataset_id": "paysim-degraded-development-v1",
+    "iteration": 1,
+    "objective": "Improve model performance by addressing missing data and ensuring proper feature scaling",
+    "actions": [
+      {
+        "action_id": "impute_type_missing",
+        "transformation": "impute_categorical",
+        "columns": [
+          "type"
+        ],
+        "parameters": {
+          "strategy": "most_frequent"
+        },
+        "rationale": "The 'type' column has 3607 missing values; imputing with the most frequent category preserves distribution and avoids introducing bias.",
+        "model_scope": "all"
+      },
+      {
+        "action_id": "one_hot_encode_type",
+        "transformation": "one_hot_encode",
+        "columns": [
+          "type"
+        ],
+        "parameters": {
+          "handle_unknown": "ignore"
+        },
+        "rationale": "Baseline contract requires categorical features to be one-hot encoded with unknown categories ignored; this ensures compatibility with all models.",
+        "model_scope": "all"
+      },
+      {
+        "action_id": "scale_numeric_features",
+        "transformation": "scale_numeric",
+        "columns": [
+          "amount",
+          "day",
+          "hour",
+          "log_amount",
+          "step"
+        ],
+        "parameters": {
+          "method": "standard"
+        },
+        "rationale": "Logistic regression expects standardized numeric features; scaling improves convergence and performance across models.",
+        "model_scope": "all"
+      }
+    ]
+  },
+  "validation": {
+    "is_valid": true,
+    "issues": [],
+    "plan": {
+      "plan_id": "plan-001",
+      "dataset_id": "paysim-degraded-development-v1",
+      "iteration": 1,
+      "objective": "Improve model performance by addressing missing data and ensuring proper feature scaling",
+      "actions": [
+        {
+          "action_id": "impute_type_missing",
+          "transformation": "impute_categorical",
+          "columns": [
+            "type"
+          ],
+          "parameters": {
+            "strategy": "most_frequent"
+          },
+          "rationale": "The 'type' column has 3607 missing values; imputing with the most frequent category preserves distribution and avoids introducing bias.",
+          "model_scope": "all"
+        },
+        {
+          "action_id": "one_hot_encode_type",
+          "transformation": "one_hot_encode",
+          "columns": [
+            "type"
+          ],
+          "parameters": {
+            "handle_unknown": "ignore"
+          },
+          "rationale": "Baseline contract requires categorical features to be one-hot encoded with unknown categories ignored; this ensures compatibility with all models.",
+          "model_scope": "all"
+        },
+        {
+          "action_id": "scale_numeric_features",
+          "transformation": "scale_numeric",
+          "columns": [
+            "amount",
+            "day",
+            "hour",
+            "log_amount",
+            "step"
+          ],
+          "parameters": {
+            "method": "standard"
+          },
+          "rationale": "Logistic regression expects standardized numeric features; scaling improves convergence and performance across models.",
+          "model_scope": "all"
+        }
+      ]
+    }
+  },
+  "assessment": {
+    "plan_id": "plan-001",
+    "iteration": 1,
+    "validation_valid": true,
+    "execution_status": "success",
+    "model_outcomes": [
+      {
+        "model_name": "logistic_regression",
+        "status": "success",
+        "primary_metric": 0.5491945491770027,
+        "recall": 0.8793728023664675,
+        "precision": 0.2927154143324028,
+        "fit_seconds": 7.645331999985501,
+        "predict_seconds": 0.5634767000447027
+      },
+      {
+        "model_name": "decision_tree",
+        "status": "success",
+        "primary_metric": 0.6102480502450799,
+        "recall": 0.7424913955089208,
+        "precision": 0.6191265159719168,
+        "fit_seconds": 13.935252500057686,
+        "predict_seconds": 0.765864799846895
+      },
+      {
+        "model_name": "random_forest",
+        "status": "success",
+        "primary_metric": 0.8313836698492895,
+        "recall": 0.7445037999293036,
+        "precision": 0.7481919065592832,
+        "fit_seconds": 76.47215619968483,
+        "predict_seconds": 3.146009099902585
+      }
+    ],
+    "data_quality_score": 0.9997227958807469,
+    "preprocessing_seconds": 0.057316699996590614,
+    "peak_memory_bytes": null
+  },
+  "feedback": {
+    "action": "ACCEPT",
+    "reason_code": "improvement_accepted",
+    "reason": "The candidate provides an acceptable benefit without violating guardrails.",
+    "plan_id": "plan-001",
+    "iteration": 1,
+    "primary_metric_delta": 0.0006036918373004685,
+    "quality_delta": 0.001660914681192227,
+    "runtime_multiplier": 1.188702043647982,
+    "is_new_best": true,
+    "recommendations": []
+  },
+  "artifacts": [],
+  "warnings": [],
+  "errors": []
+}

@@ -1,7 +1,9 @@
 """Unit tests for provider adapters without making external API calls."""
 
 import json
+from io import BytesIO
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 
@@ -56,3 +58,57 @@ def test_groq_client_decodes_structured_response(monkeypatch: pytest.MonkeyPatch
     assert sent_payload["response_format"]["json_schema"]["strict"] is False
     assert sent_request.headers["Authorization"] == "Bearer test-only-secret"
     assert sent_request.headers["User-agent"] == "agenticai-thesis/0.1.0"
+
+
+def _http_error(code: int, payload: dict[str, object]) -> HTTPError:
+    """Construct a realistic urllib error with a readable JSON response body."""
+
+    return HTTPError(
+        url="https://api.groq.com/openai/v1/chat/completions",
+        code=code,
+        msg="test error",
+        hdrs={},
+        fp=BytesIO(json.dumps(payload).encode("utf-8")),
+    )
+
+
+def test_groq_client_retries_provider_json_validation_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "test-only-secret")
+    validation_error = _http_error(
+        400,
+        {"error": {"code": "json_validate_failed", "message": "invalid model output"}},
+    )
+    valid_response = _HttpResponse(
+        {"choices": [{"message": {"content": '{"plan_id": "plan_002"}'}}]}
+    )
+
+    with patch(
+        "agenticai_thesis.agentic.model_clients.request.urlopen",
+        side_effect=[validation_error, valid_response],
+    ) as call:
+        result = GroqModelClient(GroqClientConfig(max_rate_limit_retries=1)).generate_structured(
+            system_prompt="system", user_prompt="user", json_schema={"type": "object"}
+        )
+
+    assert result == {"plan_id": "plan_002"}
+    assert call.call_count == 2
+
+
+def test_groq_client_does_not_retry_unrelated_bad_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GROQ_API_KEY", "test-only-secret")
+    bad_request = _http_error(400, {"error": {"code": "invalid_request"}})
+
+    with patch(
+        "agenticai_thesis.agentic.model_clients.request.urlopen",
+        side_effect=bad_request,
+    ) as call:
+        with pytest.raises(ModelClientError, match="HTTP 400"):
+            GroqModelClient(GroqClientConfig(max_rate_limit_retries=2)).generate_structured(
+                system_prompt="system", user_prompt="user", json_schema={}
+            )
+
+    assert call.call_count == 1
