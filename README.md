@@ -578,26 +578,48 @@ shared repeated-stratified folds και controlled MCAR missingness σε 3.607 �
 στήλης `type`. Ο Agent έκανε `ACCEPT` στο πρώτο iteration με plan:
 
 - categorical most-frequent imputation στο `type`,
-- one-hot encoding με ασφαλή unknown-category handling,
-- standard scaling των numeric features για Logistic Regression.
+- one-hot encoding με ασφαλή unknown-category handling.
 
 Το Data Quality Score αυξήθηκε από `0,998062` σε `0,999723` (`+0,001661`). Η μέση
-primary-metric μεταβολή έναντι του degraded conventional baseline ήταν `+0,000604`,
-με runtime multiplier `1,189`, χωρίς παραβίαση Recall/Precision guardrails.
+primary-metric μεταβολή έναντι του degraded conventional baseline ήταν `+0,002429`,
+με runtime multiplier `1,667`, χωρίς παραβίαση Recall/Precision guardrails.
 
 Στο untouched temporal holdout τα PR-AUC αποτελέσματα ήταν:
 
 | Model | Conventional | Agentic | Διαφορά |
 |---|---:|---:|---:|
-| Logistic Regression | 0,205972 | 0,206009 | +0,000037 |
-| Decision Tree | 0,080481 | 0,075425 | -0,005056 |
-| Random Forest | 0,353971 | 0,355597 | +0,001626 |
+| Logistic Regression | 0,205972 | 0,213225 | +0,007253 |
+| Decision Tree | 0,080481 | 0,075760 | -0,004721 |
+| Random Forest | 0,353971 | 0,355852 | +0,001881 |
 
 Τα αποτελέσματα δείχνουν ότι η βελτίωση ποιότητας δεν συνεπάγεται ομοιόμορφη
-βελτίωση κάθε classifier. Η επίδραση ήταν ουσιαστικά ουδέτερη στη Logistic
-Regression, θετική στο Random Forest PR-AUC και αρνητική στο Decision Tree. Τα
+βελτίωση κάθε classifier. Η επίδραση ήταν θετική στη Logistic Regression και στο
+Random Forest PR-AUC, αλλά αρνητική στο Decision Tree. Τα
 πλήρη fold metrics, temporal metrics και Holm-corrected Wilcoxon tests βρίσκονται
 στο `reports/`.
+
+### Χρήση μνήμης και LLM
+
+Η χρήση μνήμης μετράται με δειγματοληψία του RSS του κύριου process και των child
+processes. Επειδή τα δύο στάδια δεν ξεκινούν από το ίδιο RSS, η κύρια συγκρίσιμη
+μέτρηση είναι η αύξηση από την αρχική έως τη μέγιστη τιμή και όχι τα απόλυτα peaks:
+
+| Pipeline | Αρχικό RSS | Peak RSS | Αύξηση peak |
+|---|---:|---:|---:|
+| Degraded conventional benchmark | 607,289 MiB | 627,738 MiB | 20,449 MiB |
+| Selected Agentic candidate | 258,555 MiB | 287,375 MiB | 28,820 MiB |
+
+Το Agentic candidate χρησιμοποίησε κατά το συγκεκριμένο run `8,371 MiB` μεγαλύτερη
+αύξηση peak RSS, δηλαδή περίπου `40,9%` υψηλότερη από το conventional benchmark.
+Η κλήση του `openai/gpt-oss-20b` μέσω Groq ολοκληρώθηκε με ένα επιτυχές request,
+χωρίς failures ή retries: `1.442` prompt tokens, `1.502` completion tokens και
+`2.944` tokens συνολικά, με provider-reported χρόνο `1,728 s`. Το παρατηρούμενο
+κόστος ήταν `$0,00` με τη διαμορφωμένη χρήση του Groq Free Tier. Δεν αποθηκεύονται
+prompts, responses ή API secrets στο telemetry.
+
+Οι παραπάνω τιμές αφορούν μία πλήρη εκτέλεση. Το LLM μπορεί να παράγει διαφορετικό
+έγκυρο plan ακόμη και με μηδενικό temperature, επομένως το αποθηκευμένο run ID
+`agentic_20260805T090249Z` αποτελεί το ενιαίο επίσημο run για αυτά τα αποτελέσματα.
 
 ### Τελικά figures για τη συγγραφή
 

@@ -56,7 +56,9 @@ class CandidateAssessment(BaseModel):
     model_outcomes: tuple[ModelOutcome, ...] = ()
     data_quality_score: float | None = Field(default=None, ge=0.0, le=1.0)
     preprocessing_seconds: float = Field(default=0.0, ge=0.0)
+    memory_rss_start_bytes: int | None = Field(default=None, ge=0)
     peak_memory_bytes: int | None = Field(default=None, ge=0)
+    memory_peak_increase_bytes: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def model_names_must_be_unique(self) -> "CandidateAssessment":

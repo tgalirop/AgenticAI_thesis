@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Protocol, runtime_checkable
+from typing import Callable, Protocol, runtime_checkable
 
 import numpy as np
 import pandas as pd
@@ -21,6 +21,7 @@ from agenticai_thesis.agentic.executor import TransformationExecutor
 from agenticai_thesis.agentic.feedback import CandidateAssessment, ModelOutcome
 from agenticai_thesis.agentic.graph import CandidateEvaluationError
 from agenticai_thesis.modeling.cross_validation import CrossValidationFoldSet
+from agenticai_thesis.utils.resource_monitor import ProcessMemoryMonitor
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +64,7 @@ class AgentCandidateEvaluator:
         features: pd.DataFrame,
         target: np.ndarray,
         folds: CrossValidationFoldSet,
+        memory_monitor_factory: Callable[[], ProcessMemoryMonitor] = ProcessMemoryMonitor,
     ) -> None:
         if not isinstance(quality_evaluator, PlanQualityEvaluatorProtocol):
             raise TypeError("quality_evaluator must satisfy PlanQualityEvaluatorProtocol")
@@ -79,6 +81,7 @@ class AgentCandidateEvaluator:
         self._features = features
         self._target = np.asarray(target, dtype=int)
         self._folds = folds
+        self._memory_monitor_factory = memory_monitor_factory
 
     def evaluate(
         self,
@@ -96,37 +99,39 @@ class AgentCandidateEvaluator:
         plan = validation.plan
         model_outcomes: list[ModelOutcome] = []
         pipeline_build_seconds = 0.0
+        memory_monitor = self._memory_monitor_factory()
         try:
-            quality = self._quality_evaluator.evaluate(
-                validation=validation,
-                dataset_context=dataset_context,
-            )
-            for model_name, estimator in self._estimators.items():
-                execution = self._executor.execute(
-                    validation,
-                    dataset_context,
-                    model_name=model_name,
-                    estimator=estimator,
+            with memory_monitor:
+                quality = self._quality_evaluator.evaluate(
+                    validation=validation,
+                    dataset_context=dataset_context,
                 )
-                pipeline_build_seconds += execution.build_time_seconds
-                evaluation = self._ml_evaluator.evaluate(
-                    execution.pipeline,
-                    self._features,
-                    self._target,
-                    self._folds,
-                    model_name=model_name,
-                ).result
-                model_outcomes.append(
-                    ModelOutcome(
+                for model_name, estimator in self._estimators.items():
+                    execution = self._executor.execute(
+                        validation,
+                        dataset_context,
                         model_name=model_name,
-                        status=evaluation.status,
-                        primary_metric=evaluation.primary_metric_mean,
-                        recall=self._mean(evaluation.metric_summary.get("recall")),
-                        precision=self._mean(evaluation.metric_summary.get("precision")),
-                        fit_seconds=evaluation.total_fit_seconds,
-                        predict_seconds=evaluation.total_predict_seconds,
+                        estimator=estimator,
                     )
-                )
+                    pipeline_build_seconds += execution.build_time_seconds
+                    evaluation = self._ml_evaluator.evaluate(
+                        execution.pipeline,
+                        self._features,
+                        self._target,
+                        self._folds,
+                        model_name=model_name,
+                    ).result
+                    model_outcomes.append(
+                        ModelOutcome(
+                            model_name=model_name,
+                            status=evaluation.status,
+                            primary_metric=evaluation.primary_metric_mean,
+                            recall=self._mean(evaluation.metric_summary.get("recall")),
+                            precision=self._mean(evaluation.metric_summary.get("precision")),
+                            fit_seconds=evaluation.total_fit_seconds,
+                            predict_seconds=evaluation.total_predict_seconds,
+                        )
+                    )
         except CandidateEvaluationError:
             raise
         except (TypeError, ValueError) as exc:
@@ -142,6 +147,9 @@ class AgentCandidateEvaluator:
             model_outcomes=tuple(model_outcomes),
             data_quality_score=quality.data_quality_score,
             preprocessing_seconds=pipeline_build_seconds + quality.evaluation_seconds,
+            memory_rss_start_bytes=memory_monitor.summary.start_rss_bytes,
+            peak_memory_bytes=memory_monitor.summary.peak_rss_bytes,
+            memory_peak_increase_bytes=memory_monitor.summary.peak_increase_bytes,
         )
 
     @staticmethod

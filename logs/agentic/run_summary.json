@@ -1,5 +1,5 @@
 {
-  "run_id": "agentic_20260803T161314Z",
+  "run_id": "agentic_20260805T090249Z",
   "sample_rows": 72149,
   "degradation": {
     "type": 3607
@@ -7,10 +7,46 @@
   "initial_data_quality_score": 0.9980618811995546,
   "selected_data_quality_score": 0.9997227958807469,
   "selected_quality_delta": 0.001660914681192227,
-  "selected_primary_metric_delta": 0.0006036918373004685,
-  "selected_runtime_multiplier": 1.188702043647982,
+  "selected_primary_metric_delta": 0.0024287860455035615,
+  "selected_runtime_multiplier": 1.6671757657099306,
+  "memory_usage": {
+    "measurement": "sampled process-tree RSS",
+    "degraded_conventional_benchmark": {
+      "start_rss_bytes": 636788736,
+      "peak_rss_bytes": 658231296,
+      "peak_increase_bytes": 21442560,
+      "start_rss_megabytes": 607.2890625,
+      "peak_rss_megabytes": 627.73828125,
+      "peak_increase_megabytes": 20.44921875,
+      "samples": 1684
+    },
+    "selected_agentic_candidate": {
+      "start_rss_bytes": 271114240,
+      "peak_rss_bytes": 301334528,
+      "peak_increase_bytes": 30220288,
+      "start_rss_megabytes": 258.5546875,
+      "peak_rss_megabytes": 287.375,
+      "peak_increase_megabytes": 28.8203125
+    }
+  },
+  "llm_usage": {
+    "model": "openai/gpt-oss-20b",
+    "api_requests": 1,
+    "successful_responses": 1,
+    "failed_requests": 0,
+    "retries": 0,
+    "prompt_tokens": 1442,
+    "completion_tokens": 1502,
+    "total_tokens": 2944,
+    "provider_prompt_seconds": 0.08416748,
+    "provider_completion_seconds": 1.643650608,
+    "provider_total_seconds": 1.727818088,
+    "configured_billing_tier": "Groq Free Tier",
+    "observed_api_cost_usd": 0.0,
+    "token_scope": "successful API responses with provider usage metadata"
+  },
   "iterations": 1,
   "termination_action": "ACCEPT",
-  "selected_plan_id": "plan-001",
-  "elapsed_seconds": 318.8261966999853
+  "selected_plan_id": "plan-1",
+  "elapsed_seconds": 609.2910807000007
 }

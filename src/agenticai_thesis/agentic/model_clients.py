@@ -13,11 +13,114 @@ import time
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from threading import Lock
 from typing import Any, Protocol, runtime_checkable
 from urllib import error, request
 
 
 JsonObject = dict[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class LlmUsageSummary:
+    """Aggregate provider telemetry for one model-client lifecycle."""
+
+    model: str
+    api_requests: int
+    successful_responses: int
+    failed_requests: int
+    retries: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    provider_prompt_seconds: float
+    provider_completion_seconds: float
+    provider_total_seconds: float
+
+    def to_dict(self) -> JsonObject:
+        return {
+            "model": self.model,
+            "api_requests": self.api_requests,
+            "successful_responses": self.successful_responses,
+            "failed_requests": self.failed_requests,
+            "retries": self.retries,
+            "prompt_tokens": self.prompt_tokens,
+            "completion_tokens": self.completion_tokens,
+            "total_tokens": self.total_tokens,
+            "provider_prompt_seconds": self.provider_prompt_seconds,
+            "provider_completion_seconds": self.provider_completion_seconds,
+            "provider_total_seconds": self.provider_total_seconds,
+        }
+
+
+class LlmUsageTracker:
+    """Thread-safe accumulator that never stores prompts, responses or secrets."""
+
+    def __init__(self, model: str) -> None:
+        self._model = model
+        self._api_requests = 0
+        self._successful_responses = 0
+        self._failed_requests = 0
+        self._retries = 0
+        self._prompt_tokens = 0
+        self._completion_tokens = 0
+        self._total_tokens = 0
+        self._provider_prompt_seconds = 0.0
+        self._provider_completion_seconds = 0.0
+        self._provider_total_seconds = 0.0
+        self._lock = Lock()
+
+    def record_request(self) -> None:
+        with self._lock:
+            self._api_requests += 1
+
+    def record_failure(self) -> None:
+        with self._lock:
+            self._failed_requests += 1
+
+    def record_retry(self) -> None:
+        with self._lock:
+            self._retries += 1
+
+    def record_response(self, envelope: Mapping[str, Any]) -> None:
+        """Accumulate the optional OpenAI-compatible ``usage`` object safely."""
+
+        usage = envelope.get("usage")
+        usage = usage if isinstance(usage, Mapping) else {}
+        with self._lock:
+            self._successful_responses += 1
+            self._prompt_tokens += self._nonnegative_int(usage.get("prompt_tokens"))
+            self._completion_tokens += self._nonnegative_int(usage.get("completion_tokens"))
+            self._total_tokens += self._nonnegative_int(usage.get("total_tokens"))
+            self._provider_prompt_seconds += self._nonnegative_float(usage.get("prompt_time"))
+            self._provider_completion_seconds += self._nonnegative_float(
+                usage.get("completion_time")
+            )
+            self._provider_total_seconds += self._nonnegative_float(usage.get("total_time"))
+
+    def snapshot(self) -> LlmUsageSummary:
+        with self._lock:
+            return LlmUsageSummary(
+                model=self._model,
+                api_requests=self._api_requests,
+                successful_responses=self._successful_responses,
+                failed_requests=self._failed_requests,
+                retries=self._retries,
+                prompt_tokens=self._prompt_tokens,
+                completion_tokens=self._completion_tokens,
+                total_tokens=self._total_tokens,
+                provider_prompt_seconds=self._provider_prompt_seconds,
+                provider_completion_seconds=self._provider_completion_seconds,
+                provider_total_seconds=self._provider_total_seconds,
+            )
+
+    @staticmethod
+    def _nonnegative_int(value: Any) -> int:
+        return int(value) if isinstance(value, (int, float)) and value >= 0 else 0
+
+    @staticmethod
+    def _nonnegative_float(value: Any) -> float:
+        return float(value) if isinstance(value, (int, float)) and value >= 0 else 0.0
 
 
 class ModelClientError(RuntimeError):
@@ -78,6 +181,13 @@ class GroqModelClient:
 
     def __init__(self, config: GroqClientConfig) -> None:
         self._config = config
+        self._usage_tracker = LlmUsageTracker(config.model)
+
+    @property
+    def usage_summary(self) -> LlmUsageSummary:
+        """Return aggregate counters without exposing request or response content."""
+
+        return self._usage_tracker.snapshot()
 
     def generate_structured(
         self,
@@ -120,6 +230,7 @@ class GroqModelClient:
         endpoint = f"{self._config.base_url.rstrip('/')}/chat/completions"
 
         for attempt in range(self._config.max_rate_limit_retries + 1):
+            self._usage_tracker.record_request()
             http_request = request.Request(
                 endpoint,
                 data=json.dumps(payload).encode("utf-8"),
@@ -136,14 +247,20 @@ class GroqModelClient:
             try:
                 with request.urlopen(http_request, timeout=self._config.timeout_seconds) as response:
                     envelope = json.loads(response.read().decode("utf-8"))
+                if not isinstance(envelope, Mapping):
+                    self._usage_tracker.record_failure()
+                    raise ModelClientError("Groq response envelope must be a JSON object")
+                self._usage_tracker.record_response(envelope)
                 return self._parse_response(envelope)
             except error.HTTPError as exc:
+                self._usage_tracker.record_failure()
                 details = exc.read().decode("utf-8", errors="replace")
                 if exc.code == 429 and attempt < self._config.max_rate_limit_retries:
                     # Respect the provider hint but cap the wait.  Repeated 429s
                     # fail explicitly instead of looping or moving to a paid tier.
                     retry_after = float(exc.headers.get("Retry-After", "1"))
                     time.sleep(min(max(retry_after, 0.0), 30.0))
+                    self._usage_tracker.record_retry()
                     continue
                 # Groq can occasionally reject the model's own generated output
                 # before returning a completion. A fresh deterministic request
@@ -153,6 +270,7 @@ class GroqModelClient:
                     and "json_validate_failed" in details
                     and attempt < self._config.max_rate_limit_retries
                 ):
+                    self._usage_tracker.record_retry()
                     continue
                 if exc.code == 429:
                     raise ModelClientError(
@@ -162,8 +280,10 @@ class GroqModelClient:
                     raise ModelClientError("Groq rejected the configured API key") from exc
                 raise ModelClientError(f"Groq returned HTTP {exc.code}: {details}") from exc
             except error.URLError as exc:
+                self._usage_tracker.record_failure()
                 raise ModelClientError("Cannot reach the Groq API") from exc
             except (TimeoutError, json.JSONDecodeError) as exc:
+                self._usage_tracker.record_failure()
                 raise ModelClientError("Groq returned no valid JSON response envelope") from exc
 
         raise ModelClientError("Groq request failed after recoverable-error retries")

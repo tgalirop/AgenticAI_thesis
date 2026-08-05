@@ -41,11 +41,22 @@ def test_groq_client_requires_environment_key(monkeypatch: pytest.MonkeyPatch) -
 def test_groq_client_decodes_structured_response(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GROQ_API_KEY", "test-only-secret")
     response = _HttpResponse(
-        {"choices": [{"message": {"content": '{"plan_id": "plan_001"}'}}]}
+        {
+            "choices": [{"message": {"content": '{"plan_id": "plan_001"}'}}],
+            "usage": {
+                "prompt_tokens": 120,
+                "completion_tokens": 30,
+                "total_tokens": 150,
+                "prompt_time": 0.25,
+                "completion_time": 0.1,
+                "total_time": 0.35,
+            },
+        }
     )
 
+    client = GroqModelClient(GroqClientConfig())
     with patch("agenticai_thesis.agentic.model_clients.request.urlopen", return_value=response) as call:
-        result = GroqModelClient(GroqClientConfig()).generate_structured(
+        result = client.generate_structured(
             system_prompt="system",
             user_prompt="user",
             json_schema={"type": "object"},
@@ -58,6 +69,14 @@ def test_groq_client_decodes_structured_response(monkeypatch: pytest.MonkeyPatch
     assert sent_payload["response_format"]["json_schema"]["strict"] is False
     assert sent_request.headers["Authorization"] == "Bearer test-only-secret"
     assert sent_request.headers["User-agent"] == "agenticai-thesis/0.1.0"
+    usage = client.usage_summary
+    assert usage.api_requests == 1
+    assert usage.successful_responses == 1
+    assert usage.failed_requests == 0
+    assert usage.prompt_tokens == 120
+    assert usage.completion_tokens == 30
+    assert usage.total_tokens == 150
+    assert usage.provider_total_seconds == pytest.approx(0.35)
 
 
 def _http_error(code: int, payload: dict[str, object]) -> HTTPError:
@@ -88,12 +107,17 @@ def test_groq_client_retries_provider_json_validation_failure(
         "agenticai_thesis.agentic.model_clients.request.urlopen",
         side_effect=[validation_error, valid_response],
     ) as call:
-        result = GroqModelClient(GroqClientConfig(max_rate_limit_retries=1)).generate_structured(
+        client = GroqModelClient(GroqClientConfig(max_rate_limit_retries=1))
+        result = client.generate_structured(
             system_prompt="system", user_prompt="user", json_schema={"type": "object"}
         )
 
     assert result == {"plan_id": "plan_002"}
     assert call.call_count == 2
+    assert client.usage_summary.api_requests == 2
+    assert client.usage_summary.failed_requests == 1
+    assert client.usage_summary.successful_responses == 1
+    assert client.usage_summary.retries == 1
 
 
 def test_groq_client_does_not_retry_unrelated_bad_request(

@@ -100,6 +100,14 @@ def test_candidate_evaluator_composes_quality_and_fold_local_ml() -> None:
     assert assessment.execution_status == "success"
     assert assessment.data_quality_score == pytest.approx(0.96)
     assert assessment.preprocessing_seconds >= 0.02
+    assert assessment.peak_memory_bytes is not None
+    assert assessment.peak_memory_bytes > 0
+    assert assessment.memory_rss_start_bytes is not None
+    assert assessment.memory_peak_increase_bytes is not None
+    assert assessment.peak_memory_bytes >= assessment.memory_rss_start_bytes
+    assert assessment.memory_peak_increase_bytes == (
+        assessment.peak_memory_bytes - assessment.memory_rss_start_bytes
+    )
     assert len(assessment.model_outcomes) == 1
     assert assessment.model_outcomes[0].status == "success"
     assert assessment.model_outcomes[0].primary_metric is not None

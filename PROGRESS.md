@@ -603,34 +603,46 @@ VALID=True
 sampling actions μείωσαν σημαντικά το Precision και απορρίφθηκαν σωστά από τα
 guardrails. Το ενεργό allowlist περιορίστηκε στις data-quality/feature preprocessing
 ενέργειες και το prompt απέκτησε per-column missingness και baseline-pipeline
-contract. Η τελική reproducibility εκτέλεση ολοκληρώθηκε σε 318,83 δευτερόλεπτα:
+contract. Η τελική εκτέλεση με memory και LLM telemetry ολοκληρώθηκε σε 609,29 δευτερόλεπτα:
 
 ```text
 sample rows: 72.149
 controlled missing type values: 3.607
 iterations: 1
 termination: ACCEPT
-selected plan: plan-001
+selected plan: plan-1
 quality score: 0,998062 → 0,999723
-mean primary metric delta: +0,000604
-runtime multiplier: 1,189
+mean primary metric delta: +0,002429
+runtime multiplier: 1,667
+conventional peak RSS increase: 20,449 MiB
+agentic peak RSS increase: 28,820 MiB
+LLM usage: 1 request, 2.944 tokens, 1,728 s, $0,00 observed cost
 ```
 
 Temporal PR-AUC:
 
 | Model | Conventional | Agentic |
 |---|---:|---:|
-| Logistic Regression | 0,205972 | 0,206009 |
-| Decision Tree | 0,080481 | 0,075425 |
-| Random Forest | 0,353971 | 0,355597 |
+| Logistic Regression | 0,205972 | 0,213225 |
+| Decision Tree | 0,080481 | 0,075760 |
+| Random Forest | 0,353971 | 0,355852 |
 
-Η τελική ερμηνεία παραμένει μικτή: η ποιότητα βελτιώθηκε με μικρό υπολογιστικό
-κόστος, αλλά η επίδραση στην predictive performance εξαρτάται από τον classifier.
+Η τελική ερμηνεία παραμένει μικτή: η ποιότητα βελτιώθηκε, αλλά η επίδραση στην
+predictive performance εξαρτάται από τον classifier. Η αύξηση του peak RSS ήταν
+`8,371 MiB` μεγαλύτερη για τον Agentic candidate (περίπου `40,9%`), ενώ το runtime
+multiplier ήταν `1,667`. Η απόλυτη μνήμη δεν συγκρίνεται απευθείας επειδή τα στάδια
+ξεκίνησαν από διαφορετικό RSS· χρησιμοποιείται η αύξηση από start σε peak.
 
-Το συνολικό test suite αυξήθηκε από 67 σε 94 tests και ολοκληρώνεται επιτυχώς:
+Το επίσημο telemetry run είναι το `agentic_20260805T090249Z`. Ο Groq client
+κατέγραψε 1 επιτυχή κλήση, 0 failures, 0 retries, 1.442 prompt tokens, 1.502
+completion tokens και 2.944 total tokens, χωρίς αποθήκευση prompt, response ή API
+key. Το παρατηρούμενο κόστος ήταν `$0,00` με Groq Free Tier. Τα πολλαπλά degradation
+scenarios παραμένουν σκόπιμα για επόμενη πειραματική επέκταση.
+
+Το συνολικό test suite αυξήθηκε από 67 σε 96 tests και ολοκληρώνεται επιτυχώς:
 
 ```text
-94 passed
+96 passed
 ```
 
 ## Τελική ολοκλήρωση κώδικα
@@ -646,6 +658,9 @@ Temporal PR-AUC:
 - Ο Groq client κάνει περιορισμένο retry όταν ο provider απορρίψει το JSON που
   παρήγαγε το ίδιο το μοντέλο (`json_validate_failed`), χωρίς να επαναλαμβάνει
   άσχετα HTTP 400 errors.
+- Προστέθηκαν αντικειμενοστρεφείς `ProcessMemoryMonitor` και `LlmUsageTracker` για
+  ασφαλή καταγραφή process-tree RSS, requests, retries, failures, tokens και
+  provider-reported χρόνων χωρίς αποθήκευση ευαίσθητου περιεχομένου.
 - Προστέθηκε class-based `ThesisFigureGenerator` και reproducible CLI για έξι
   τελικά figures: PR-AUC, Precision/Recall, Data Quality, runtime και LangGraph
   workflow και high-level συνολική αρχιτεκτονική. Όλα προέρχονται από τα

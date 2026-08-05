@@ -42,6 +42,7 @@ from agenticai_thesis.modeling.statistical_tests import PairedPipelineComparator
 from agenticai_thesis.quality.degradation import ControlledDataDegrader, ControlledDegradationConfig
 from agenticai_thesis.quality.plan_quality import TransformationAwarePlanQualityEvaluator
 from agenticai_thesis.utils.file_io import write_json_atomic
+from agenticai_thesis.utils.resource_monitor import ProcessMemoryMonitor
 
 
 class AgenticExperimentRunner:
@@ -78,16 +79,18 @@ class AgenticExperimentRunner:
         self._write_degradation_audit(degraded_result.affected_rows_by_column, len(degraded))
 
         print("3/7 Evaluating the conventional pipeline on the same degraded folds...")
-        baseline_result = benchmark_models(
-            degraded,
-            model_names=self._baseline["models"],
-            model_parameters=self._baseline.get("model_parameters", {}),
-            target_column=self._data.target_column,
-            folds=int(self._baseline["cross_validation"]["folds"]),
-            repeats=int(self._baseline["cross_validation"]["repeats"]),
-            random_seed=int(self._baseline["cross_validation"]["random_seed"]),
-            threshold=float(self._baseline["decision_threshold"]),
-        )
+        with ProcessMemoryMonitor() as baseline_memory_monitor:
+            baseline_result = benchmark_models(
+                degraded,
+                model_names=self._baseline["models"],
+                model_parameters=self._baseline.get("model_parameters", {}),
+                target_column=self._data.target_column,
+                folds=int(self._baseline["cross_validation"]["folds"]),
+                repeats=int(self._baseline["cross_validation"]["repeats"]),
+                random_seed=int(self._baseline["cross_validation"]["random_seed"]),
+                threshold=float(self._baseline["decision_threshold"]),
+            )
+        baseline_memory = baseline_memory_monitor.summary
         self._save_benchmark("degraded_conventional", baseline_result)
 
         print("4/7 Running the LangGraph Agent loop...")
@@ -110,22 +113,25 @@ class AgenticExperimentRunner:
         quality_evaluator = TransformationAwarePlanQualityEvaluator(x)
         initial_quality = quality_evaluator.initial_quality()
         baseline_assessment = self._baseline_assessment(
-            baseline_result.fold_metrics, initial_quality.data_quality_score
+            baseline_result.fold_metrics,
+            initial_quality.data_quality_score,
+            peak_memory_bytes=baseline_memory.peak_rss_bytes,
         )
         registry = TransformationRegistry.default()
         llm = self._agent.llm
+        groq_client = GroqModelClient(
+            GroqClientConfig(
+                model=llm.model,
+                base_url=llm.base_url,
+                api_key_environment_variable=llm.api_key_environment_variable,
+                timeout_seconds=llm.timeout_seconds,
+                temperature=llm.temperature,
+                reasoning_effort=llm.reasoning_effort,
+                max_rate_limit_retries=llm.max_rate_limit_retries,
+            )
+        )
         strategy_generator = StrategyGenerator(
-            model_client=GroqModelClient(
-                GroqClientConfig(
-                    model=llm.model,
-                    base_url=llm.base_url,
-                    api_key_environment_variable=llm.api_key_environment_variable,
-                    timeout_seconds=llm.timeout_seconds,
-                    temperature=llm.temperature,
-                    reasoning_effort=llm.reasoning_effort,
-                    max_rate_limit_retries=llm.max_rate_limit_retries,
-                )
-            ),
+            model_client=groq_client,
             prompt_provider=StrategyPromptProvider(),
             parser=TransformationPlanParser(),
             allowed_transformations=self._agent.allowed_transformations,
@@ -226,6 +232,36 @@ class AgenticExperimentRunner:
                 "selected_quality_delta": selected.feedback.quality_delta,
                 "selected_primary_metric_delta": selected.feedback.primary_metric_delta,
                 "selected_runtime_multiplier": selected.feedback.runtime_multiplier,
+                "memory_usage": {
+                    "measurement": "sampled process-tree RSS",
+                    "degraded_conventional_benchmark": baseline_memory.to_dict(),
+                    "selected_agentic_candidate": {
+                        "start_rss_bytes": selected.assessment.memory_rss_start_bytes,
+                        "peak_rss_bytes": selected.assessment.peak_memory_bytes,
+                        "peak_increase_bytes": selected.assessment.memory_peak_increase_bytes,
+                        "start_rss_megabytes": (
+                            selected.assessment.memory_rss_start_bytes / (1024**2)
+                            if selected.assessment.memory_rss_start_bytes is not None
+                            else None
+                        ),
+                        "peak_rss_megabytes": (
+                            selected.assessment.peak_memory_bytes / (1024**2)
+                            if selected.assessment.peak_memory_bytes is not None
+                            else None
+                        ),
+                        "peak_increase_megabytes": (
+                            selected.assessment.memory_peak_increase_bytes / (1024**2)
+                            if selected.assessment.memory_peak_increase_bytes is not None
+                            else None
+                        ),
+                    },
+                },
+                "llm_usage": {
+                    **groq_client.usage_summary.to_dict(),
+                    "configured_billing_tier": "Groq Free Tier",
+                    "observed_api_cost_usd": 0.0,
+                    "token_scope": "successful API responses with provider usage metadata",
+                },
                 "iterations": len(final_state.history),
                 "termination_action": final_state.termination_action,
                 "selected_plan_id": selected.plan.plan_id,
@@ -271,7 +307,12 @@ class AgenticExperimentRunner:
         )
 
     @staticmethod
-    def _baseline_assessment(folds: pd.DataFrame, quality_score: float) -> CandidateAssessment:
+    def _baseline_assessment(
+        folds: pd.DataFrame,
+        quality_score: float,
+        *,
+        peak_memory_bytes: int | None = None,
+    ) -> CandidateAssessment:
         outcomes = []
         for model, group in folds.groupby("model", sort=False):
             outcomes.append(
@@ -290,6 +331,9 @@ class AgenticExperimentRunner:
             iteration=0,
             model_outcomes=tuple(outcomes),
             data_quality_score=quality_score,
+            memory_rss_start_bytes=None,
+            peak_memory_bytes=peak_memory_bytes,
+            memory_peak_increase_bytes=None,
         )
 
     @staticmethod
