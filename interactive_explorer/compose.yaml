@@ -1,0 +1,24 @@
+name: agentic-thesis-explorer
+
+services:
+  # Το backend σερβίρει μόνο το versioned, συγκεντρωτικό experiment snapshot.
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Το Nginx σερβίρει το React build και προωθεί /api requests στο backend.
+  frontend:
+    build:
+      context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "3000:80"

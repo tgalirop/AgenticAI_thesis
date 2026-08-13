@@ -678,3 +678,37 @@ scenarios παραμένουν σκόπιμα για επόμενη πειραμ
 
 Όλα τα Agentic components έχουν υλοποιηθεί ως συνεργαζόμενες κλάσεις και όχι ως
 monolithic scripts ή tightly coupled functions.
+
+## Interactive Thesis Explorer (2026-08-13)
+
+- Προστέθηκε ως πλήρως απομονωμένο υποσύστημα ο φάκελος
+  `interactive_explorer/`. Δεν τροποποιεί ούτε επανεκτελεί την κύρια
+  πειραματική λογική.
+- Το React/TypeScript frontend περιλαμβάνει clickable workflow 12 σταδίων,
+  dataset journey, class-prevalence plots, πραγματικές PR/ROC curves,
+  temporal final comparisons, confusion matrices, paired-fold statistics,
+  quality, runtime, memory και LLM/token telemetry.
+- Το FastAPI backend σερβίρει μόνο συγκεντρωτικό, validated snapshot και δεν
+  διαβάζει raw PaySim rows ούτε API keys.
+- Ο reproducible snapshot generator υπολογίζει τις curve coordinates από τα
+  επίσημα OOF/temporal predictions και ελέγχει ότι PR-AUC και ROC-AUC
+  συμφωνούν με τα επίσημα aggregate CSV.
+- Προστέθηκε Docker Compose με ξεχωριστά frontend/backend containers. Το
+  production frontend σερβίρεται από Nginx και το `/api` προωθείται στο
+  FastAPI service.
+- Ολοκληρώθηκαν επιτυχώς TypeScript production build, Docker health check,
+  frontend/API end-to-end HTTP checks και npm audit (`0 vulnerabilities`).
+- Η εκπαιδευτική τεκμηρίωση επεκτάθηκε ώστε κάθε workflow stage να εξηγεί
+  «γιατί», «πώς», «τι αποφεύγουμε» και «τι κρατάμε». Προστέθηκαν 18 όροι σε
+  απλό γλωσσάρι, τετραμερή explanation panels και σαφείς προειδοποιήσεις για
+  το τι επιτρέπεται και τι δεν επιτρέπεται να συμπεράνουμε από κάθε γράφημα.
+- Προστέθηκε ξεχωριστό διαδραστικό LangGraph εργαστήριο βασισμένο στην
+  πραγματική Python `StateGraph` τοπολογία και στο επίσημο run checkpoint. Ο
+  χρήστης μπορεί να επιθεωρεί 7 nodes και 10 edges, να βλέπει state reads/writes
+  και να αναπαράγει βήμα-βήμα τόσο το επίσημο `ACCEPT` trace όσο και τον
+  fail-closed `invalid → RETRY` κλάδο, χωρίς νέα LLM κλήση ή model fitting.
+- Το αρχικό οριζόντιο workflow redesign έγινε κάθετο αρχιτεκτονικό διάγραμμα:
+  απεικονίζει πραγματικό temporal branch, locked holdout, ξεχωριστούς
+  Conventional/Agentic κλάδους, paired επανένωση, freeze gate και τελική
+  συνάντηση frozen plan/holdout. Προστέθηκαν custom phase cards, χρωματική
+  σημασιολογία, edge labels, legend και sticky explanation inspector.
