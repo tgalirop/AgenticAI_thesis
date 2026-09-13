@@ -34,7 +34,7 @@ class ExplorerPayload(BaseModel):
     datasets: dict[str, Any]
     quality: dict[str, Any]
     cross_validation: dict[str, Any]
-    temporal_evaluation: dict[str, Any]
+    test_evaluation: dict[str, Any]
     resources: dict[str, Any]
     selected_plan: dict[str, Any]
     caveats: list[str] = Field(min_length=1)

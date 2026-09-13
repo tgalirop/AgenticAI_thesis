@@ -31,9 +31,9 @@ function ArchitectureCard({ item, active }: { item: ArchitectureNode; active: bo
 /**
  * Vertical architectural map of the real experiment.
  *
- * The diagram deliberately contains one virtual "Locked holdout" storage node:
- * it makes the temporal branch visible without pretending that another
- * executable pipeline stage exists. Clicking it opens the temporal-split detail.
+ * The diagram deliberately contains one virtual "Locked test dataset" storage node:
+ * it makes the test branch visible without pretending that another
+ * executable pipeline stage exists. Clicking it opens the chronological split detail.
  */
 export function WorkflowExplorer({ steps }: WorkflowExplorerProps) {
   const [selectedId, setSelectedId] = useState(steps[0]?.id);
@@ -44,15 +44,15 @@ export function WorkflowExplorer({ steps }: WorkflowExplorerProps) {
     { id: "raw", detailId: "raw", x: 260, y: 0, phase: "01 · DATA SOURCE", title: "Raw PaySim CSV", subtitle: "6.362.620 συναλλαγές", badge: "INPUT", variant: "source", icon: <Database /> },
     { id: "streaming", detailId: "streaming", x: 260, y: 135, phase: "02 · INGESTION", title: "Streaming & schema", subtitle: "Lazy CSV → validated Parquet", variant: "data", icon: <ScanSearch /> },
     { id: "features", detailId: "features", x: 260, y: 270, phase: "03 · PREPARATION", title: "Leakage-safe features", subtitle: "Row-wise modeling table", variant: "data", icon: <Braces /> },
-    { id: "temporal", detailId: "temporal", x: 260, y: 405, phase: "04 · TEMPORAL BOUNDARY", title: "Temporal split", subtitle: "Πλήρη time steps · όχι random rows", badge: "CRITICAL", variant: "split", icon: <Split /> },
-    { id: "sample", detailId: "sample", x: 35, y: 575, phase: "DEVELOPMENT PATH", title: "Reproducible sample", subtitle: "72.149 rows · normal:fraud 10:1", variant: "development", icon: <TestTube2 /> },
-    { id: "locked_holdout", detailId: "temporal", x: 485, y: 575, phase: "FINAL TEST PATH", title: "Locked temporal holdout", subtitle: "123.580 rows · steps 595–743", badge: "LOCKED", variant: "locked", icon: <LockKeyhole /> },
+    { id: "test", detailId: "test", x: 260, y: 405, phase: "04 · TEST BOUNDARY", title: "Chronological split", subtitle: "Πλήρη time steps · όχι random rows", badge: "CRITICAL", variant: "split", icon: <Split /> },
+    { id: "sample", detailId: "sample", x: 35, y: 575, phase: "TRAINING PATH", title: "Reproducible sample", subtitle: "72.149 rows · normal:fraud 10:1", variant: "training", icon: <TestTube2 /> },
+    { id: "locked_test_dataset", detailId: "test", x: 485, y: 575, phase: "FINAL TEST PATH", title: "Locked test dataset", subtitle: "123.580 rows · steps 595–743", badge: "LOCKED", variant: "locked", icon: <LockKeyhole /> },
     { id: "mcar", detailId: "mcar", x: 35, y: 730, phase: "CONTROLLED EXPERIMENT", title: "5% MCAR degradation", subtitle: "3.607 missing values στη type", variant: "degradation", icon: <Network /> },
     { id: "conventional", detailId: "pipelines", x: -55, y: 900, phase: "PIPELINE A", title: "Conventional benchmark", subtitle: "Fixed preprocessing + 3 models", variant: "conventional", icon: <ShieldCheck /> },
     { id: "agentic", detailId: "agent", x: 220, y: 900, phase: "PIPELINE B", title: "LangGraph Agent", subtitle: "Plan → validate → execute → feedback", variant: "agentic", icon: <Bot /> },
-    { id: "paired", detailId: "paired", x: 82, y: 1070, phase: "DEVELOPMENT EVIDENCE", title: "Paired 5×5 comparison", subtitle: "3 models · 25 κοινά folds", variant: "comparison", icon: <GitCompareArrows /> },
+    { id: "paired", detailId: "paired", x: 82, y: 1070, phase: "TRAINING EVIDENCE", title: "Paired 5×5 comparison", subtitle: "3 models · 25 κοινά folds", variant: "comparison", icon: <GitCompareArrows /> },
     { id: "freeze", detailId: "freeze", x: 82, y: 1215, phase: "DECISION GATE", title: "Freeze selected plan", subtitle: "plan-1 · ACCEPT · iteration 1", badge: "FROZEN", variant: "freeze", icon: <LockKeyhole /> },
-    { id: "holdout", detailId: "holdout", x: 320, y: 1390, phase: "FINAL EVALUATION", title: "Temporal holdout test", subtitle: "Conventional vs Agentic · once", variant: "final", icon: <TestTube2 /> },
+    { id: "test_dataset", detailId: "test_dataset", x: 320, y: 1390, phase: "FINAL EVALUATION", title: "Test dataset", subtitle: "Conventional vs Agentic · once", variant: "final", icon: <TestTube2 /> },
     { id: "statistics", detailId: "statistics", x: 320, y: 1540, phase: "THESIS EVIDENCE", title: "Results & interpretation", subtitle: "Metrics · statistics · cost · figures", badge: "OUTPUT", variant: "output", icon: <FileCode2 /> },
   ], []);
 
@@ -72,20 +72,20 @@ export function WorkflowExplorer({ steps }: WorkflowExplorerProps) {
     style: { strokeWidth: 2.3 },
   });
   const edges = useMemo<Edge[]>(() => [
-    edge("e1", "raw", "streaming"), edge("e2", "streaming", "features"), edge("e3", "features", "temporal"),
-    edge("e4", "temporal", "sample", "steps 1–594", "development"), edge("e5", "temporal", "locked_holdout", "steps 595–743", "locked"),
-    edge("e6", "sample", "mcar", "development copy", "development"),
+    edge("e1", "raw", "streaming"), edge("e2", "streaming", "features"), edge("e3", "features", "test"),
+    edge("e4", "test", "sample", "steps 1–594", "training"), edge("e5", "test", "locked_test_dataset", "steps 595–743", "locked"),
+    edge("e6", "sample", "mcar", "training copy", "training"),
     edge("e7", "mcar", "conventional", "ίδιες missing θέσεις", "conventional"), edge("e8", "mcar", "agentic", "ίδιες missing θέσεις", "agentic"),
     edge("e9", "conventional", "paired", "fold metrics", "conventional"), edge("e10", "agentic", "paired", "fold metrics", "agentic"),
-    edge("e11", "paired", "freeze", "development-only decision", "development"),
-    edge("e12", "freeze", "holdout", "frozen plan", "agentic"), edge("e13", "locked_holdout", "holdout", "opens once", "locked"),
-    edge("e14", "holdout", "statistics", "final evidence", "final"),
+    edge("e11", "paired", "freeze", "training-only decision", "training"),
+    edge("e12", "freeze", "test_dataset", "frozen plan", "agentic"), edge("e13", "locked_test_dataset", "test_dataset", "opens once", "locked"),
+    edge("e14", "test_dataset", "statistics", "final evidence", "final"),
   ], []);
 
   return (
     <section className="workflow-layout architectural">
       <div className="architecture-stage">
-        <div className="architecture-legend"><span><i className="legend-development" />Development</span><span><i className="legend-agentic" />Agentic</span><span><i className="legend-locked" />Locked test</span></div>
+        <div className="architecture-legend"><span><i className="legend-training" />Training</span><span><i className="legend-agentic" />Agentic</span><span><i className="legend-locked" />Locked test</span></div>
         <div className="workflow-canvas architectural" aria-label="Κάθετο αρχιτεκτονικό workflow">
           <ReactFlow
             nodes={nodes} edges={edges}

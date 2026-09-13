@@ -15,8 +15,8 @@ from agenticai_thesis.agentic.strategy_generator import (
 def _context(iteration: int = 1) -> StrategyPromptContext:
     return StrategyPromptContext(
         dataset=DatasetContext(
-            dataset_id="paysim-development-v1",
-            role=DatasetRole.DEVELOPMENT,
+            dataset_id="paysim-training-v1",
+            role=DatasetRole.TRAINING,
             column_types={
                 "amount": ColumnKind.NUMERIC,
                 "type": ColumnKind.CATEGORICAL,
@@ -35,7 +35,7 @@ def _context(iteration: int = 1) -> StrategyPromptContext:
 def _valid_response() -> dict[str, object]:
     return {
         "plan_id": "plan_001",
-        "dataset_id": "paysim-development-v1",
+        "dataset_id": "paysim-training-v1",
         "iteration": 1,
         "objective": "Improve robustness to extreme amounts.",
         "actions": [

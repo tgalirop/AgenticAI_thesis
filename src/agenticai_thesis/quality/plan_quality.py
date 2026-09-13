@@ -16,7 +16,7 @@ class DataFrameQualityReportBuilder:
     """Build the minimal transparent report required by DataQualityEvaluator.
 
     This controlled experiment isolates completeness. Domain validity and
-    cross-column consistency remain measured by the full development profiler;
+    cross-column consistency remain measured by the full training profiler;
     they are not fabricated for a small sampled modeling table.
     """
 
@@ -71,8 +71,8 @@ class TransformationAwarePlanQualityEvaluator:
 
         if not validation.is_valid or validation.plan is None:
             raise ValueError("Plan quality evaluation requires a valid plan")
-        if dataset_context.role != DatasetRole.DEVELOPMENT:
-            raise ValueError("Plan quality evaluation is allowed only on development data")
+        if dataset_context.role != DatasetRole.TRAINING:
+            raise ValueError("Plan quality evaluation is allowed only on training data")
         started = time.perf_counter()
         transformed = self._frame.copy(deep=True)
 

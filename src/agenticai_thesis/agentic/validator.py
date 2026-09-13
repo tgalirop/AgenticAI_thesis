@@ -48,11 +48,11 @@ class TransformationPlanValidator:
         """Return every detected issue so one retry can repair the complete plan."""
 
         issues: list[ValidationIssue] = []
-        if context.role == DatasetRole.TEMPORAL_TEST:
+        if context.role == DatasetRole.TEST_DATASET:
             issues.append(
                 ValidationIssue(
-                    code="temporal_test_access_forbidden",
-                    message="Transformation planning or execution on the temporal test set is forbidden.",
+                    code="test_dataset_access_forbidden",
+                    message="Transformation planning or execution on the test dataset is forbidden.",
                 )
             )
         if plan.dataset_id != context.dataset_id:
@@ -100,8 +100,8 @@ class TransformationPlanValidator:
                 )
 
             # Sampling must be represented as a fold-local pipeline operation. It
-            # can be selected from development context, but never run on validation
-            # or temporal-test observations.
+            # can be selected from training context, but never run on validation
+            # or test dataset observations.
             if action.transformation == "resample_classes" and context.role == DatasetRole.VALIDATION_FOLD:
                 issues.append(
                     ValidationIssue(

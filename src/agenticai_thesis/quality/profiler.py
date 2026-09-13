@@ -22,7 +22,7 @@ from agenticai_thesis.data.load import scan_dataset
 from agenticai_thesis.utils.file_io import write_json_atomic
 
 
-DEFAULT_PROFILE_PATH = PROJECT_ROOT / "reports/profiles/development_profile.json"
+DEFAULT_PROFILE_PATH = PROJECT_ROOT / "reports/profiles/training_profile.json"
 EXPECTED_TRANSACTION_TYPES = ("CASH_IN", "CASH_OUT", "DEBIT", "PAYMENT", "TRANSFER")
 
 # Polars types are grouped explicitly so the report logic remains readable and
@@ -175,8 +175,8 @@ def profile_dataset(
     """Profile a Parquet/CSV dataset and return a JSON-serializable report.
 
     The function accepts arbitrary paths for unit testing and reuse.  The public
-    CLI below intentionally supplies only the configured development path, which
-    protects the temporal test set from accidental exploratory inspection.
+    CLI below intentionally supplies only the configured training path, which
+    protects the test dataset from accidental exploratory inspection.
     """
 
     source_path = Path(dataset_path)
@@ -195,7 +195,7 @@ def profile_dataset(
 
     # A single aggregate query calculates the row count, full-row uniqueness and
     # all per-column statistics.  This minimizes repeated scans of the 6.2M-row
-    # development file.
+    # training file.
     aggregate_expressions = [
         pl.len().alias("__rows"),
         pl.struct(pl.all()).n_unique().alias("__unique_rows"),
@@ -311,7 +311,7 @@ def generate_profile(
 
 
 def main() -> None:
-    """Profile only the configured development set and write its JSON report."""
+    """Profile only the configured training set and write its JSON report."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default="configs/data.yaml")
@@ -323,12 +323,12 @@ def main() -> None:
         output_path = PROJECT_ROOT / output_path
 
     output = generate_profile(
-        config.development_path,
+        config.training_path,
         output_path,
         target_column=config.target_column,
         time_column=config.time_column,
     )
-    print(f"Development profile created: {output.relative_to(PROJECT_ROOT)}")
+    print(f"Training profile created: {output.relative_to(PROJECT_ROOT)}")
 
 
 if __name__ == "__main__":

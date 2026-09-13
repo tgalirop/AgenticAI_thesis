@@ -25,10 +25,10 @@ class ColumnKind(StrEnum):
 class DatasetRole(StrEnum):
     """Dataset partitions that may be presented to an Agent component."""
 
-    DEVELOPMENT = "development"
+    TRAINING = "training"
     TRAINING_FOLD = "training_fold"
     VALIDATION_FOLD = "validation_fold"
-    TEMPORAL_TEST = "temporal_test"
+    TEST_DATASET = "test_dataset"
 
 
 class DatasetContext(BaseModel):

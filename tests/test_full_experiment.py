@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import replace
 from typing import Sequence
 
 import pytest
 
 from experiments.run_full_experiment import FullExperimentRunner
+from agenticai_thesis.config import load_data_config
+
+
+@pytest.fixture
+def processed_partitions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Supply temporary partition paths without requiring the local PaySim data."""
+    config = replace(
+        load_data_config("configs/data.yaml"),
+        training_path=tmp_path / "training.parquet",
+        test_dataset_path=tmp_path / "test_dataset.parquet",
+    )
+    # The recording executor never reads data; prerequisites only check existence.
+    config.training_path.touch()
+    config.test_dataset_path.touch()
+    monkeypatch.setattr("experiments.run_full_experiment.load_data_config", lambda _: config)
 
 
 class RecordingExecutor:
@@ -30,7 +46,7 @@ def _runner(executor: RecordingExecutor) -> FullExperimentRunner:
     )
 
 
-def test_selected_processed_data_stages_execute_in_scientific_order() -> None:
+def test_selected_processed_data_stages_execute_in_scientific_order(processed_partitions: None) -> None:
     executor = RecordingExecutor()
 
     _runner(executor).run(("conventional", "agentic"))
@@ -60,7 +76,7 @@ def test_invalid_stage_selection_fails_before_execution(
     assert executor.calls == []
 
 
-def test_agentic_command_forwards_all_configuration_paths() -> None:
+def test_agentic_command_forwards_all_configuration_paths(processed_partitions: None) -> None:
     executor = RecordingExecutor()
 
     _runner(executor).run(("agentic",))

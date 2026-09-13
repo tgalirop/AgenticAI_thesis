@@ -25,8 +25,8 @@ class ThesisFigureGenerator:
     PIPELINE_LABELS = {"conventional": "Conventional", "agentic": "Agentic AI"}
     COLORS = {"conventional": "#4C78A8", "agentic": "#F58518"}
 
-    def __init__(self, temporal_metrics_path: Path, run_summary_path: Path, output_dir: Path) -> None:
-        self._metrics_path = Path(temporal_metrics_path)
+    def __init__(self, test_metrics_path: Path, run_summary_path: Path, output_dir: Path) -> None:
+        self._metrics_path = Path(test_metrics_path)
         self._summary_path = Path(run_summary_path)
         self._output_dir = Path(output_dir)
 
@@ -49,15 +49,15 @@ class ThesisFigureGenerator:
         )
 
     def _plot_pr_auc(self, metrics: pd.DataFrame) -> Path:
-        """Compare temporal PR-AUC, the primary imbalanced-data metric."""
+        """Compare test PR-AUC, the primary imbalanced-data metric."""
 
         figure, axis = plt.subplots(figsize=(9, 5.5))
         self._grouped_bars(axis, metrics, ("pr_auc",), value_format="{:.3f}")
         axis.set_ylabel("PR-AUC")
         axis.set_ylim(0, max(0.42, metrics["pr_auc"].max() * 1.22))
-        axis.set_title("Temporal Holdout PR-AUC: Conventional vs Agentic AI")
+        axis.set_title("Test dataset PR-AUC: Conventional vs Agentic AI")
         axis.grid(axis="y", alpha=0.2)
-        return self._save(figure, "temporal_pr_auc_comparison.png")
+        return self._save(figure, "test_pr_auc_comparison.png")
 
     def _plot_precision_recall(self, metrics: pd.DataFrame) -> Path:
         """Show the precision/recall trade-off for each model and pipeline."""
@@ -81,10 +81,10 @@ class ThesisFigureGenerator:
         axis.set_xticks(x, [self.MODEL_LABELS[model] for model in models])
         axis.set_ylabel("Score")
         axis.set_ylim(0, 1.13)
-        axis.set_title("Temporal Holdout Precision and Recall")
+        axis.set_title("Test dataset Precision and Recall")
         axis.legend(ncol=2, fontsize=9)
         axis.grid(axis="y", alpha=0.2)
-        return self._save(figure, "temporal_precision_recall_comparison.png")
+        return self._save(figure, "test_precision_recall_comparison.png")
 
     def _plot_quality(self, summary: dict[str, object]) -> Path:
         """Visualize the measured data-quality improvement after the Agent plan."""
@@ -159,7 +159,7 @@ class ThesisFigureGenerator:
         arrow((10.1, 2.43), (11.3, 2.43), "accept / stop")
         arrow((8.5, 2.35), (2.75, 6.0), "retry", "--")
         axis.set_title("Implemented LangGraph Agentic Data-Quality Workflow", fontsize=15, pad=14)
-        axis.text(6.5, 0.65, "Only validated declarative plans reach the deterministic Executor; the temporal holdout opens after plan selection.", ha="center", fontsize=9, color="#555")
+        axis.text(6.5, 0.65, "Only validated declarative plans reach the deterministic Executor; the test dataset opens after plan selection.", ha="center", fontsize=9, color="#555")
         return self._save(figure, "langgraph_agent_workflow.png")
 
     def _plot_high_level_architecture(self) -> Path:
@@ -236,17 +236,17 @@ class ThesisFigureGenerator:
         # Data preparation and the leakage boundary.
         box(0.35, 7.7, 1.65, 1.0, "Raw PaySim CSV\n~6.36M rows", colors["data"])
         box(2.55, 7.7, 1.75, 1.0, "Polars Pipeline\nCSV → Parquet", colors["data"])
-        box(4.85, 7.7, 2.0, 1.0, "Temporal Split\nby transaction step", colors["data"])
-        box(7.55, 8.25, 2.15, 0.9, "Development Data\nmodel/plan selection", colors["data"])
-        box(7.55, 6.85, 2.15, 0.9, "Locked Temporal Test\nopened only at the end", colors["locked"], dashed=True)
+        box(4.85, 7.7, 2.0, 1.0, "Chronological Split\nby transaction step", colors["data"])
+        box(7.55, 8.25, 2.15, 0.9, "Training Data\nmodel/plan selection", colors["data"])
+        box(7.55, 6.85, 2.15, 0.9, "Locked Test dataset\nopened only at the end", colors["locked"], dashed=True)
         arrow((2.0, 8.2), (2.55, 8.2))
         arrow((4.3, 8.2), (4.85, 8.2))
         arrow((6.85, 8.2), (7.55, 8.7))
         arrow((6.85, 8.0), (7.55, 7.3))
 
-        # Two fair experimental branches start from the same development source.
+        # Two fair experimental branches start from the same training source.
         box(1.0, 4.65, 3.0, 1.25, "CONVENTIONAL BRANCH\nFixed preprocessing pipeline\n(shared 5×5 CV folds)", colors["conventional"], fontsize=10.5)
-        box(5.0, 4.65, 3.0, 1.25, "CONTROLLED DEGRADATION\nDeterministic MCAR injection\n(development copy only)", colors["agentic"], fontsize=10.5)
+        box(5.0, 4.65, 3.0, 1.25, "CONTROLLED DEGRADATION\nDeterministic MCAR injection\n(training copy only)", colors["agentic"], fontsize=10.5)
         arrow((8.0, 8.25), (3.3, 5.9))
         arrow((8.7, 8.25), (6.5, 5.9))
 
@@ -263,7 +263,7 @@ class ThesisFigureGenerator:
         box(0.65, 0.55, 3.7, 1.15, "Shared ML Evaluation\nLogistic Regression • Decision Tree • Random Forest\nPR-AUC primary metric", colors["evaluation"], fontsize=9.5)
         box(5.0, 0.55, 2.9, 1.15, "Paired Comparison\nWilcoxon + Holm correction\nquality + predictive + runtime", colors["evaluation"], fontsize=9.5)
         box(8.65, 0.55, 2.6, 1.15, "Selected Agentic Plan\nfrozen before test access", colors["evaluation"])
-        box(12.05, 2.9, 3.0, 1.3, "Final Temporal Evaluation\nConventional vs Agentic\non untouched holdout", colors["locked"], fontsize=10.5)
+        box(12.05, 2.9, 3.0, 1.3, "Final Test Evaluation\nConventional vs Agentic\non untouched test dataset", colors["locked"], fontsize=10.5)
         box(12.05, 0.55, 3.0, 1.15, "Thesis Outputs\nmetrics • statistics • plans\nfigures • audit logs", colors["evaluation"], fontsize=10.5)
 
         arrow((2.5, 2.55), (2.5, 1.7))
@@ -306,11 +306,11 @@ class ThesisFigureGenerator:
         required = {"pipeline", "model", "pr_auc", "precision", "recall"}
         missing = sorted(required.difference(metrics.columns))
         if missing:
-            raise ValueError(f"Temporal metrics are missing columns: {missing}")
+            raise ValueError(f"Test metrics are missing columns: {missing}")
         expected = {(model, pipeline) for model in ThesisFigureGenerator.MODEL_LABELS for pipeline in ThesisFigureGenerator.PIPELINE_LABELS}
         actual = set(zip(metrics["model"], metrics["pipeline"], strict=False))
         if expected != actual:
-            raise ValueError("Temporal metrics must contain exactly one row per model and pipeline")
+            raise ValueError("Test metrics must contain exactly one row per model and pipeline")
 
     @staticmethod
     def _validate_summary(summary: dict[str, object]) -> None:

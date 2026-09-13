@@ -163,9 +163,9 @@ class FullExperimentRunner:
             )
 
         # When dataset preparation is omitted, downstream stages require the
-        # immutable development and temporal-test partitions to exist already.
+        # immutable training and test dataset partitions to exist already.
         if "data" not in stages and any(stage in stages for stage in ("conventional", "agentic")):
-            required = (data_config.development_path, data_config.temporal_test_path)
+            required = (data_config.training_path, data_config.test_dataset_path)
             missing_data = [str(path) for path in required if not path.is_file()]
             if missing_data:
                 raise FileNotFoundError(f"Missing processed dataset artifacts: {missing_data}")

@@ -57,13 +57,13 @@ downsampled σημεία καμπυλών — όχι raw συναλλαγές ή
 
 - **Workflow:** εξηγεί βήμα-βήμα τη μεθοδολογία και συνδέει κάθε βήμα με τα
   πραγματικά αρχεία του repository.
-- **Data journey:** δείχνει temporal partitions, class imbalance, sampling και
+- **Data journey:** δείχνει chronological partitions, class imbalance, sampling και
   controlled MCAR degradation.
 - **Model evaluation:** παρουσιάζει PR curves, ROC curves, confusion matrices,
-  final temporal comparisons και paired-fold διαφορές.
+  final test comparisons και paired-fold διαφορές.
 - **Statistics:** ξεχωρίζει τα paired tests των 25 folds από τη μία περιγραφική
-  αξιολόγηση του temporal holdout.
+  αξιολόγηση του test dataset.
 - **Resources:** παρουσιάζει runtime, memory και LLM/token telemetry.
 
-Οι καμπύλες του temporal holdout και των out-of-fold predictions προέρχονται από
+Οι καμπύλες του test dataset και των out-of-fold predictions προέρχονται από
 πραγματικά `y_true`/`y_score`. Δεν είναι σχεδιασμένα παραδείγματα.

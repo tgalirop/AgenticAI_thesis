@@ -95,7 +95,7 @@ data/raw/paysim.csv
 - schema validation του PaySim,
 - streaming μετατροπή CSV σε συμπιεσμένο Parquet,
 - leakage-safe feature engineering,
-- temporal split βάσει ολόκληρων χρονικών βημάτων,
+- chronological split βάσει ολόκληρων χρονικών βημάτων,
 - ενιαίο executable data pipeline.
 
 Δημιουργήθηκαν τα features:
@@ -121,20 +121,20 @@ data/raw/paysim.csv
 
 ```text
 data/processed/paysim.parquet
-data/splits/development.parquet
-data/splits/temporal_test.parquet
+data/splits/training.parquet
+data/splits/test_dataset.parquet
 ```
 
-### Αποτελέσματα temporal split
+### Αποτελέσματα chronological split
 
 | Dataset | Rows | Steps | Fraud |
 |---|---:|---:|---:|
 | Πλήρες PaySim | 6.362.620 | 1–743 | 8.213 |
-| Development | 6.239.040 | 1–594 | 6.559 |
-| Temporal test | 123.580 | 595–743 | 1.654 |
+| Training | 6.239.040 | 1–594 | 6.559 |
+| Test dataset | 123.580 | 595–743 | 1.654 |
 
-Δεν υπάρχει κοινό χρονικό βήμα μεταξύ development και temporal test set. Το
-temporal test set παραμένει ανέγγιχτο μέχρι την τελική αξιολόγηση.
+Δεν υπάρχει κοινό χρονικό βήμα μεταξύ training και test dataset. Το
+test dataset παραμένει ανέγγιχτο μέχρι την τελική αξιολόγηση.
 
 Εκτέλεση pipeline:
 
@@ -148,10 +148,10 @@ python -m experiments.run_data_pipeline
 ## Data Quality Profiler
 
 Υλοποιήθηκε αυτόνομος, deterministic profiler χωρίς LLM. Αναλύει αποκλειστικά το
-development set και παράγει:
+training set και παράγει:
 
 ```text
-reports/profiles/development_profile.json
+reports/profiles/training_profile.json
 ```
 
 Το report περιλαμβάνει:
@@ -203,7 +203,7 @@ python -m agenticai_thesis.quality.profiler
 
 Για το εσωτερικό benchmarking χρησιμοποιήθηκαν:
 
-- όλες οι 6.559 fraud εγγραφές του development set,
+- όλες οι 6.559 fraud εγγραφές του training set,
 - 65.590 αναπαραγώγιμα δειγματοληπτημένες normal εγγραφές,
 - 72.149 συνολικές εγγραφές,
 - 5 folds × 5 repeats,
@@ -218,11 +218,11 @@ python -m agenticai_thesis.quality.profiler
 | Decision Tree | 0,6112 | 0,8578 | 0,7432 | 0,6192 | 0,6755 |
 | Random Forest | **0,8313** | **0,9582** | 0,7420 | **0,7567** | **0,7492** |
 
-Το Random Forest είχε την υψηλότερη μέση PR-AUC στο development sample.
+Το Random Forest είχε την υψηλότερη μέση PR-AUC στο training sample.
 
 Οι παραπάνω μετρικές δεν αποτελούν τελική εκτίμηση επίδοσης στον πραγματικό
-πληθυσμό PaySim, επειδή το development sample έχει τεχνητά αυξημένο fraud
-prevalence. Η τελική αξιολόγηση θα γίνει στο πλήρες temporal holdout.
+πληθυσμό PaySim, επειδή το training sample έχει τεχνητά αυξημένο fraud
+prevalence. Η τελική αξιολόγηση θα γίνει στο πλήρες test dataset.
 
 Παρήχθησαν τοπικά:
 
@@ -267,7 +267,7 @@ DQScore = 0.30·Completeness + 0.25·Validity
         + 0.25·Consistency  + 0.20·Uniqueness
 ```
 
-Πραγματικά αποτελέσματα στο development set:
+Πραγματικά αποτελέσματα στο training set:
 
 | Dimension | Score |
 |---|---:|
@@ -280,7 +280,7 @@ DQScore = 0.30·Completeness + 0.25·Validity
 Το αποτέλεσμα αποθηκεύεται στο:
 
 ```text
-reports/profiles/development_quality.json
+reports/profiles/training_quality.json
 ```
 
 και δημιουργείται με:
@@ -339,7 +339,7 @@ allowlist. Απορρίπτει:
 - άγνωστες, ελλιπείς ή μη ασφαλείς παραμέτρους,
 - duplicate transformation actions,
 - sampling πάνω σε validation data,
-- οποιαδήποτε χρήση temporal test context,
+- οποιαδήποτε χρήση test dataset context,
 - plan που αναφέρεται σε διαφορετικό dataset.
 
 Ο Validator επιστρέφει όλα τα προβλήματα μαζί ως typed `ValidationIssue` objects,
@@ -377,7 +377,7 @@ plans σε ασφαλή model pipelines.
 
 - Ο Executor δέχεται μόνο `ValidationResult(is_valid=True)`.
 - Το plan και το execution context πρέπει να αναφέρονται στο ίδιο dataset.
-- Απαγορεύεται execution σε validation-fold και temporal-test context.
+- Απαγορεύεται execution σε validation-fold και test dataset context.
 - Τα model-scoped actions εφαρμόζονται μόνο στο αντίστοιχο μοντέλο.
 - Η σειρά των transformations διατηρείται ξεχωριστά ανά στήλη.
 - Τα sklearn components κλωνοποιούνται και δεν μοιράζονται fitted state.
@@ -560,7 +560,7 @@ https://github.com/tgalirop/AgenticAI_thesis
 - `PlanQualityEvaluatorProtocol` ως boundary για το controlled-degradation πείραμα.
 
 Τα end-to-end graph tests καλύπτουν άμεσο `ACCEPT`, invalid-plan `RETRY`, απαγόρευση
-temporal-test context πριν από το LLM και `STOP_EXECUTION_ERROR` μετά από διαδοχικές
+test dataset context πριν από το LLM και `STOP_EXECUTION_ERROR` μετά από διαδοχικές
 recoverable failures.
 
 ### Πραγματικό Groq smoke test
@@ -593,7 +593,7 @@ VALID=True
 - `TransformationAwarePlanQualityEvaluator`,
 - `DataFrameQualityReportBuilder`,
 - `AgenticPlanBenchmark`,
-- `TemporalHoldoutComparator`,
+- `TestDatasetComparator`,
 - `PairedPipelineComparator` με Wilcoxon και Holm-Bonferroni correction,
 - πλήρες `AgenticExperimentRunner`/CLI,
 - ασφαλής `.env` φόρτωση μέσω `python-dotenv`,
@@ -619,7 +619,7 @@ agentic peak RSS increase: 28,820 MiB
 LLM usage: 1 request, 2.944 tokens, 1,728 s, $0,00 observed cost
 ```
 
-Temporal PR-AUC:
+Test PR-AUC:
 
 | Model | Conventional | Agentic |
 |---|---:|---:|
@@ -652,7 +652,7 @@ scenarios παραμένουν σκόπιμα για επόμενη πειραμ
 - Ο orchestrator εκτελεί με σταθερή σειρά τα στάδια `data`, `conventional` και
   `agentic`, χωρίς να αντιγράφει την εξειδικευμένη λογική τους.
 - Υποστηρίζεται ασφαλής επιλογή υποσυνόλου σταδίων για επανάληψη πειραμάτων πάνω
-  στα ήδη παραχθέντα immutable temporal partitions.
+  στα ήδη παραχθέντα immutable chronological partitions.
 - Προστέθηκαν preflight checks, fail-fast subprocess execution και έξι unit tests
   για σειρά σταδίων, forwarding configurations και λανθασμένες επιλογές.
 - Ο Groq client κάνει περιορισμένο retry όταν ο provider απορρίψει το JSON που
@@ -686,12 +686,12 @@ monolithic scripts ή tightly coupled functions.
   πειραματική λογική.
 - Το React/TypeScript frontend περιλαμβάνει clickable workflow 12 σταδίων,
   dataset journey, class-prevalence plots, πραγματικές PR/ROC curves,
-  temporal final comparisons, confusion matrices, paired-fold statistics,
+  test final comparisons, confusion matrices, paired-fold statistics,
   quality, runtime, memory και LLM/token telemetry.
 - Το FastAPI backend σερβίρει μόνο συγκεντρωτικό, validated snapshot και δεν
   διαβάζει raw PaySim rows ούτε API keys.
 - Ο reproducible snapshot generator υπολογίζει τις curve coordinates από τα
-  επίσημα OOF/temporal predictions και ελέγχει ότι PR-AUC και ROC-AUC
+  επίσημα OOF/test predictions και ελέγχει ότι PR-AUC και ROC-AUC
   συμφωνούν με τα επίσημα aggregate CSV.
 - Προστέθηκε Docker Compose με ξεχωριστά frontend/backend containers. Το
   production frontend σερβίρεται από Nginx και το `/api` προωθείται στο
@@ -708,7 +708,7 @@ monolithic scripts ή tightly coupled functions.
   και να αναπαράγει βήμα-βήμα τόσο το επίσημο `ACCEPT` trace όσο και τον
   fail-closed `invalid → RETRY` κλάδο, χωρίς νέα LLM κλήση ή model fitting.
 - Το αρχικό οριζόντιο workflow redesign έγινε κάθετο αρχιτεκτονικό διάγραμμα:
-  απεικονίζει πραγματικό temporal branch, locked holdout, ξεχωριστούς
+  απεικονίζει πραγματικό test branch, locked test dataset, ξεχωριστούς
   Conventional/Agentic κλάδους, paired επανένωση, freeze gate και τελική
-  συνάντηση frozen plan/holdout. Προστέθηκαν custom phase cards, χρωματική
+  συνάντηση frozen plan/test dataset. Προστέθηκαν custom phase cards, χρωματική
   σημασιολογία, edge labels, legend και sticky explanation inspector.

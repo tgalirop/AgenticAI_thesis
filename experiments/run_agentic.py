@@ -13,7 +13,7 @@ import pandas as pd
 import polars as pl
 from dotenv import load_dotenv
 
-from agenticai_thesis.agentic.benchmarking import AgenticPlanBenchmark, TemporalHoldoutComparator
+from agenticai_thesis.agentic.benchmarking import AgenticPlanBenchmark, TestDatasetComparator
 from agenticai_thesis.agentic.candidate_evaluation import AgentCandidateEvaluator
 from agenticai_thesis.agentic.checkpointing import JsonCheckpointStore
 from agenticai_thesis.agentic.domain import ColumnKind, DatasetContext, DatasetRole
@@ -46,7 +46,7 @@ from agenticai_thesis.utils.resource_monitor import ProcessMemoryMonitor
 
 
 class AgenticExperimentRunner:
-    """Own the reproducible experiment lifecycle from sample to final holdout."""
+    """Own the reproducible experiment lifecycle from sample to final test dataset."""
 
     def __init__(self, data_config_path: str, baseline_config_path: str, agent_config_path: str) -> None:
         self._data = load_data_config(data_config_path)
@@ -57,9 +57,9 @@ class AgenticExperimentRunner:
     def run(self) -> None:
         started = time.perf_counter()
         load_dotenv(PROJECT_ROOT / ".env", override=False)
-        print("1/7 Loading the shared reproducible development sample...")
+        print("1/7 Loading the shared reproducible training sample...")
         sample = load_reproducible_sample(
-            self._data.development_path,
+            self._data.training_path,
             target_column=self._data.target_column,
             negative_to_positive_ratio=int(self._baseline["sampling"]["negative_to_positive_ratio"]),
             random_seed=int(self._baseline["cross_validation"]["random_seed"]),
@@ -201,24 +201,24 @@ class AgenticExperimentRunner:
         )
         statistics.to_csv(PROJECT_ROOT / "reports/statistical_tests/paired_results.csv", index=False)
 
-        print("6/7 Opening the untouched temporal holdout after plan selection...")
-        temporal = pl.read_parquet(self._data.temporal_test_path).to_pandas()
-        temporal_output = TemporalHoldoutComparator(
+        print("6/7 Opening the untouched test dataset after plan selection...")
+        test = pl.read_parquet(self._data.test_dataset_path).to_pandas()
+        test_output = TestDatasetComparator(
             executor=executor,
             estimators=estimators,
             context=context,
             threshold=float(self._baseline["decision_threshold"]),
         ).evaluate(
             validation=selected.validation,
-            development=degraded,
-            temporal_test=temporal,
+            training=degraded,
+            test_dataset=test,
             target_column=self._data.target_column,
         )
-        temporal_output.metrics.to_csv(
-            PROJECT_ROOT / "reports/metrics/temporal_holdout_results.csv", index=False
+        test_output.metrics.to_csv(
+            PROJECT_ROOT / "reports/metrics/test_dataset_results.csv", index=False
         )
-        temporal_output.predictions.to_parquet(
-            PROJECT_ROOT / "reports/metrics/temporal_holdout_predictions.parquet", index=False
+        test_output.predictions.to_parquet(
+            PROJECT_ROOT / "reports/metrics/test_dataset_predictions.parquet", index=False
         )
 
         print("7/7 Writing final run summary...")
@@ -280,8 +280,8 @@ class AgenticExperimentRunner:
             types[feature] = ColumnKind.BINARY
         types[self._data.target_column] = ColumnKind.TARGET
         return DatasetContext(
-            dataset_id="paysim-degraded-development-v1",
-            role=DatasetRole.DEVELOPMENT,
+            dataset_id="paysim-degraded-training-v1",
+            role=DatasetRole.TRAINING,
             column_types=types,
             target_column=self._data.target_column,
             protected_columns=frozenset({self._data.target_column}),

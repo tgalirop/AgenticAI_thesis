@@ -2,7 +2,7 @@
   "iteration": 1,
   "plan": {
     "plan_id": "plan-001",
-    "dataset_id": "paysim-degraded-development-v1",
+    "dataset_id": "paysim-degraded-training-v1",
     "iteration": 1,
     "objective": "Improve model performance by addressing missing data and ensuring proper feature scaling",
     "actions": [
@@ -53,7 +53,7 @@
     "issues": [],
     "plan": {
       "plan_id": "plan-001",
-      "dataset_id": "paysim-degraded-development-v1",
+      "dataset_id": "paysim-degraded-training-v1",
       "iteration": 1,
       "objective": "Improve model performance by addressing missing data and ensuring proper feature scaling",
       "actions": [

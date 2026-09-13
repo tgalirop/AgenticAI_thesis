@@ -46,7 +46,7 @@ class TransformationExecutor:
         plan = validation.plan
         if plan.dataset_id != context.dataset_id:
             raise ValueError("Validated plan and execution context refer to different datasets")
-        if context.role in {DatasetRole.VALIDATION_FOLD, DatasetRole.TEMPORAL_TEST}:
+        if context.role in {DatasetRole.VALIDATION_FOLD, DatasetRole.TEST_DATASET}:
             raise ValueError(f"Pipeline construction is forbidden for dataset role '{context.role}'")
 
         started = time.perf_counter()

@@ -8,7 +8,7 @@ def main() -> None:
     """Create reproducible, publication-ready PNG files."""
 
     outputs = ThesisFigureGenerator(
-        temporal_metrics_path=PROJECT_ROOT / "reports/metrics/temporal_holdout_results.csv",
+        test_metrics_path=PROJECT_ROOT / "reports/metrics/test_dataset_results.csv",
         run_summary_path=PROJECT_ROOT / "logs/agentic/run_summary.json",
         output_dir=PROJECT_ROOT / "figures/final_comparisons",
     ).generate_all()

@@ -18,8 +18,8 @@ from agenticai_thesis.config import PROJECT_ROOT
 from agenticai_thesis.utils.file_io import write_json_atomic
 
 
-DEFAULT_PROFILE_PATH = PROJECT_ROOT / "reports/profiles/development_profile.json"
-DEFAULT_QUALITY_PATH = PROJECT_ROOT / "reports/profiles/development_quality.json"
+DEFAULT_PROFILE_PATH = PROJECT_ROOT / "reports/profiles/training_profile.json"
+DEFAULT_QUALITY_PATH = PROJECT_ROOT / "reports/profiles/training_quality.json"
 
 
 @dataclass(frozen=True)
@@ -164,7 +164,7 @@ class DataQualityEvaluator:
 
 
 def main() -> None:
-    """Evaluate the development profile and persist Agent-ready quality metrics."""
+    """Evaluate the training profile and persist Agent-ready quality metrics."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(

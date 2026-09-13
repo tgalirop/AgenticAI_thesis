@@ -46,7 +46,7 @@ def _assessment(plan_id: str, iteration: int, score: float) -> CandidateAssessme
 def _record(iteration: int, action: FeedbackAction, *, new_best: bool = False) -> IterationRecord:
     plan = TransformationPlan(
         plan_id=f"plan_{iteration}",
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         iteration=iteration,
         objective="Test state transition.",
     )
@@ -88,7 +88,7 @@ def _state_manager_and_state() -> tuple[AgentStateManager, AgentState]:
     manager = AgentStateManager(clock=FixedClock())
     state = manager.create(
         run_id="run_001",
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         baseline=_assessment("conventional", 0, 0.70),
         max_iterations=3,
         initial_data_quality_score=0.95,

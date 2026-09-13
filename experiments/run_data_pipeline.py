@@ -1,4 +1,4 @@
-"""Build the processed PaySim dataset and leakage-safe temporal partitions."""
+"""Build the processed PaySim dataset and leakage-safe chronological partitions."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import polars as pl
 
 from agenticai_thesis.config import PROJECT_ROOT, load_data_config
 from agenticai_thesis.data.convert_to_parquet import convert_csv_to_parquet
-from agenticai_thesis.data.temporal_split import create_temporal_splits
+from agenticai_thesis.data.dataset_split import create_dataset_splits
 
 
 def _dataset_summary(path: Path) -> dict[str, int]:
@@ -43,16 +43,16 @@ def main() -> None:
     print("1/2 Converting raw PaySim CSV to Parquet...")
     convert_csv_to_parquet(config.raw_csv_path, config.parquet_path)
 
-    print("2/2 Creating leakage-safe temporal partitions...")
-    development, temporal_test = create_temporal_splits(
+    print("2/2 Creating leakage-safe chronological partitions...")
+    training, test_dataset = create_dataset_splits(
         config.parquet_path,
-        config.development_path,
-        config.temporal_test_path,
+        config.training_path,
+        config.test_dataset_path,
         time_column=config.time_column,
-        test_fraction=config.temporal_test_fraction,
+        test_fraction=config.test_dataset_fraction,
     )
 
-    for label, path in (("development", development), ("temporal_test", temporal_test)):
+    for label, path in (("training", training), ("test_dataset", test_dataset)):
         print(f"{label}: {path.relative_to(PROJECT_ROOT)} {_dataset_summary(path)}")
     print(f"Pipeline completed in {time.perf_counter() - started:.2f} seconds.")
 

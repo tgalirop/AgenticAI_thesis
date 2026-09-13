@@ -2,7 +2,7 @@
   "iteration": 1,
   "plan": {
     "plan_id": "plan-1",
-    "dataset_id": "paysim-degraded-development-v1",
+    "dataset_id": "paysim-degraded-training-v1",
     "iteration": 1,
     "objective": "improve fraud detection performance",
     "actions": [
@@ -37,7 +37,7 @@
     "issues": [],
     "plan": {
       "plan_id": "plan-1",
-      "dataset_id": "paysim-degraded-development-v1",
+      "dataset_id": "paysim-degraded-training-v1",
       "iteration": 1,
       "objective": "improve fraud detection performance",
       "actions": [

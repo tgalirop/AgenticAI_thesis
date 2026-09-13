@@ -83,14 +83,14 @@ class AgenticPlanBenchmark:
 
 
 @dataclass(frozen=True)
-class TemporalEvaluationOutput:
-    """Final untouched-holdout metrics and prediction records."""
+class TestEvaluationOutput:
+    """Final untouched-test dataset metrics and prediction records."""
 
     metrics: pd.DataFrame
     predictions: pd.DataFrame
 
 
-class TemporalHoldoutComparator:
+class TestDatasetComparator:
     """Compare fixed conventional and selected Agentic pipelines exactly once."""
 
     def __init__(
@@ -110,14 +110,14 @@ class TemporalHoldoutComparator:
         self,
         *,
         validation: ValidationResult,
-        development: pd.DataFrame,
-        temporal_test: pd.DataFrame,
+        training: pd.DataFrame,
+        test_dataset: pd.DataFrame,
         target_column: str,
-    ) -> TemporalEvaluationOutput:
-        x_train = development[MODEL_FEATURES]
-        y_train = development[target_column].astype(int).to_numpy()
-        x_test = temporal_test[MODEL_FEATURES]
-        y_test = temporal_test[target_column].astype(int).to_numpy()
+    ) -> TestEvaluationOutput:
+        x_train = training[MODEL_FEATURES]
+        y_train = training[target_column].astype(int).to_numpy()
+        x_test = test_dataset[MODEL_FEATURES]
+        y_test = test_dataset[target_column].astype(int).to_numpy()
         metric_rows: list[dict[str, Any]] = []
         prediction_rows: list[pd.DataFrame] = []
 
@@ -142,7 +142,7 @@ class TemporalHoldoutComparator:
                         "pipeline": pipeline_name,
                         "model": model_name,
                         "train_rows": len(x_train),
-                        "temporal_test_rows": len(x_test),
+                        "test_dataset_rows": len(x_test),
                         **compute_classification_metrics(y_test, scores, threshold=self._threshold),
                     }
                 )
@@ -157,7 +157,7 @@ class TemporalHoldoutComparator:
                         }
                     )
                 )
-        return TemporalEvaluationOutput(
+        return TestEvaluationOutput(
             metrics=pd.DataFrame.from_records(metric_rows),
             predictions=pd.concat(prediction_rows, ignore_index=True),
         )

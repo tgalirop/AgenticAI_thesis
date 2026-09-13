@@ -66,7 +66,7 @@ class QueuedCandidateEvaluator:
         # validator routed the plan to this service.
         plan = validation.plan  # type: ignore[attr-defined]
         assert plan is not None
-        assert dataset_context.role == DatasetRole.DEVELOPMENT
+        assert dataset_context.role == DatasetRole.TRAINING
         self.plan_ids.append(plan.plan_id)
         return _assessment(plan.plan_id, plan.iteration, self._scores.popleft())
 
@@ -86,7 +86,7 @@ def _plan(plan_id: str, iteration: int, transformation: str = "class_weight") ->
     parameters = {"mode": "balanced"} if transformation == "class_weight" else {}
     return {
         "plan_id": plan_id,
-        "dataset_id": "development-v1",
+        "dataset_id": "training-v1",
         "iteration": iteration,
         "objective": "Improve preprocessing safely.",
         "actions": [
@@ -102,9 +102,9 @@ def _plan(plan_id: str, iteration: int, transformation: str = "class_weight") ->
     }
 
 
-def _context(role: DatasetRole = DatasetRole.DEVELOPMENT) -> DatasetContext:
+def _context(role: DatasetRole = DatasetRole.TRAINING) -> DatasetContext:
     return DatasetContext(
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         role=role,
         column_types={"amount": ColumnKind.NUMERIC, "isFraud": ColumnKind.TARGET},
         target_column="isFraud",
@@ -148,7 +148,7 @@ def _workflow(
 def _initial_state() -> object:
     return AgentStateManager(clock=lambda: datetime(2026, 8, 3, tzinfo=UTC)).create(
         run_id="graph_run_001",
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         baseline=_assessment("conventional", 0, 0.70),
         max_iterations=3,
         initial_data_quality_score=0.90,
@@ -196,14 +196,14 @@ def test_invalid_plan_is_not_executed_and_retry_can_succeed(tmp_path: Path) -> N
     assert len(model.calls) == 2
 
 
-def test_temporal_test_is_rejected_before_calling_model(tmp_path: Path) -> None:
+def test_test_dataset_is_rejected_before_calling_model(tmp_path: Path) -> None:
     evaluator = QueuedCandidateEvaluator([0.72])
     workflow, model, _store = _workflow(tmp_path, [_plan("plan_001", 1)], evaluator)
 
-    with pytest.raises(ValueError, match="development data"):
+    with pytest.raises(ValueError, match="training data"):
         workflow.run(
             agent_state=_initial_state(),  # type: ignore[arg-type]
-            dataset_context=_context(DatasetRole.TEMPORAL_TEST),
+            dataset_context=_context(DatasetRole.TEST_DATASET),
             quality_metrics={},
             baseline_metrics={},
         )

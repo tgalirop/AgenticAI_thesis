@@ -14,11 +14,11 @@ from agenticai_thesis.agentic.transformations import TransformationRegistry
 from agenticai_thesis.agentic.validator import TransformationPlanValidator
 
 
-def _context(role: DatasetRole = DatasetRole.DEVELOPMENT) -> DatasetContext:
+def _context(role: DatasetRole = DatasetRole.TRAINING) -> DatasetContext:
     """Create the minimal schema exposed to the Agent during validation."""
 
     return DatasetContext(
-        dataset_id="paysim-development-v1",
+        dataset_id="paysim-training-v1",
         role=role,
         column_types={
             "amount": ColumnKind.NUMERIC,
@@ -32,7 +32,7 @@ def _context(role: DatasetRole = DatasetRole.DEVELOPMENT) -> DatasetContext:
     )
 
 
-def _plan(*actions: TransformationAction, dataset_id: str = "paysim-development-v1") -> TransformationPlan:
+def _plan(*actions: TransformationAction, dataset_id: str = "paysim-training-v1") -> TransformationPlan:
     return TransformationPlan(
         plan_id="plan_001",
         dataset_id=dataset_id,
@@ -117,10 +117,10 @@ def test_incompatible_type_and_invalid_parameters_are_rejected() -> None:
     assert codes == {"incompatible_column_type", "invalid_parameter", "unknown_parameter"}
 
 
-def test_temporal_test_context_is_never_validated_for_execution() -> None:
-    result = _validator().validate(_plan(), _context(DatasetRole.TEMPORAL_TEST))
+def test_test_dataset_context_is_never_validated_for_execution() -> None:
+    result = _validator().validate(_plan(), _context(DatasetRole.TEST_DATASET))
     assert result.is_valid is False
-    assert result.issues[0].code == "temporal_test_access_forbidden"
+    assert result.issues[0].code == "test_dataset_access_forbidden"
 
 
 def test_sampling_is_rejected_on_validation_fold() -> None:

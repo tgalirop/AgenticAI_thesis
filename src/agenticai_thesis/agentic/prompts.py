@@ -74,7 +74,7 @@ class StrategyPromptProvider:
 Return exactly one transformation plan matching the supplied JSON Schema.
 Use only the explicitly allowed declarative transformations and known columns.
 Never emit Python, shell commands, SQL, file paths, or executable code.
-Never request access to the held-out temporal test set.
+Never request access to the held-out test dataset.
 Prefer the smallest defensible plan and explain every action in its rationale.
 Select an action only when a supplied quality metric or baseline-pipeline contract
 directly justifies it. Do not change class-imbalance handling merely because the

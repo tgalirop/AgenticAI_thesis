@@ -103,8 +103,8 @@ class PrepareIterationNode:
         context = graph_state["dataset_context"]
         if state.status != AgentRunStatus.RUNNING:
             raise ValueError("Agent workflow requires a running AgentState")
-        if context.role != DatasetRole.DEVELOPMENT:
-            raise ValueError("Agent planning is permitted only on development data")
+        if context.role != DatasetRole.TRAINING:
+            raise ValueError("Agent planning is permitted only on training data")
         if context.dataset_id != state.dataset_id:
             raise ValueError("AgentState and DatasetContext refer to different datasets")
         if state.current_iteration >= state.max_iterations:

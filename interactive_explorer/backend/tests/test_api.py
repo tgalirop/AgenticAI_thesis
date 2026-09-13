@@ -20,5 +20,5 @@ def test_explorer_contains_every_scientific_section() -> None:
     payload = response.json()
     assert len(payload["workflow"]) >= 10
     assert payload["datasets"]["raw"]["rows"] == 6_362_620
-    assert payload["temporal_evaluation"]["metrics"]
+    assert payload["test_evaluation"]["metrics"]
     assert payload["cross_validation"]["paired_tests"]

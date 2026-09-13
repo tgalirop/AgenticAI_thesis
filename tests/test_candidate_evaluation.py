@@ -29,7 +29,7 @@ class FixedQualityEvaluator:
 
     def evaluate(self, *, validation: object, dataset_context: DatasetContext) -> PlanQualityEvaluation:
         assert validation is not None
-        assert dataset_context.role == DatasetRole.DEVELOPMENT
+        assert dataset_context.role == DatasetRole.TRAINING
         return PlanQualityEvaluation(data_quality_score=0.96, evaluation_seconds=0.02)
 
 
@@ -43,9 +43,9 @@ def _data() -> tuple[pd.DataFrame, np.ndarray]:
     return features, target
 
 
-def _context(role: DatasetRole = DatasetRole.DEVELOPMENT) -> DatasetContext:
+def _context(role: DatasetRole = DatasetRole.TRAINING) -> DatasetContext:
     return DatasetContext(
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         role=role,
         column_types={"amount": ColumnKind.NUMERIC, "isFraud": ColumnKind.TARGET},
         target_column="isFraud",
@@ -56,7 +56,7 @@ def _context(role: DatasetRole = DatasetRole.DEVELOPMENT) -> DatasetContext:
 def _validation() -> object:
     plan = TransformationPlan(
         plan_id="plan_001",
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         iteration=1,
         objective="Scale numeric fraud features.",
         actions=(
@@ -113,9 +113,9 @@ def test_candidate_evaluator_composes_quality_and_fold_local_ml() -> None:
     assert assessment.model_outcomes[0].primary_metric is not None
 
 
-def test_candidate_evaluator_rejects_temporal_test_role() -> None:
-    with pytest.raises(ValueError, match="development data"):
+def test_candidate_evaluator_rejects_test_dataset_role() -> None:
+    with pytest.raises(ValueError, match="training data"):
         _evaluator().evaluate(
             validation=_validation(),  # type: ignore[arg-type]
-            dataset_context=_context(DatasetRole.TEMPORAL_TEST),
+            dataset_context=_context(DatasetRole.TEST_DATASET),
         )

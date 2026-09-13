@@ -155,7 +155,7 @@ AgentApplication
 - Ο Executor γνωρίζει μόνο transformations που υπάρχουν στη whitelist/registry.
 - Κάθε plan περνά υποχρεωτικά από Validator.
 - Oversampling εφαρμόζεται μόνο στο training μέρος κάθε fold.
-- Το temporal test set δεν είναι διαθέσιμο στους Agent components.
+- Το test dataset δεν είναι διαθέσιμο στους Agent components.
 - Κάθε iteration ξεκινά από το ίδιο αρχικό training dataset.
 - Ο `TransformationExecutor` δέχεται μόνο `ValidationResult(is_valid=True)`.
 - Κάθε executable action επιλύεται μέσω injected `TransformationFactoryRegistry`.
@@ -187,7 +187,7 @@ TransformationExecutor → ExecutionResult
 Ο `ModelPipelineBuilder` εφαρμόζει μόνο actions που αντιστοιχούν στο τρέχον model
 scope, διατηρεί τη σειρά τους ανά στήλη και κλωνοποιεί τα sklearn components ώστε
 να μην υπάρχει κοινό fitted state. Ο Executor εφαρμόζει ανεξάρτητο defence-in-depth
-έλεγχο και αρνείται execution σε validation-fold ή temporal-test context, ακόμη
+έλεγχο και αρνείται execution σε validation-fold ή test dataset context, ακόμη
 και αν του δοθεί χειροκίνητα ένα φαινομενικά έγκυρο result.
 
 ## Shared cross-validation και ML evaluation
@@ -266,7 +266,7 @@ TransformationPlan → Validator → Executor
 ```
 
 Το prompt περιλαμβάνει μόνο compact metadata και metrics. Δεν περιλαμβάνει raw
-PaySim rows και δεν επιτρέπεται πρόσβαση στο temporal holdout. Το endpoint λαμβάνει
+PaySim rows και δεν επιτρέπεται πρόσβαση στο test dataset. Το endpoint λαμβάνει
 το JSON Schema του `TransformationPlan`, αλλά η απάντηση θεωρείται πάντοτε μη
 έμπιστη: περνά ξανά από strict Pydantic validation (`extra="forbid"`) και από
 ελέγχους dataset/iteration identity. Το LLM προτείνει μόνο allowlisted declarative
@@ -282,7 +282,7 @@ validator, evaluator, policy ή checkpoint store.
 Nodes:
 
 1. `PrepareIterationNode`: ελέγχει lifecycle, dataset identity, iteration budget και
-   επιτρέπει αποκλειστικά development context.
+   επιτρέπει αποκλειστικά training context.
 2. `GenerateStrategyNode`: δημιουργεί compact prompt context και καλεί τον
    provider-neutral Strategy Generator.
 3. `ValidateStrategyNode`: εφαρμόζει allowlist, schema, parameter και leakage rules.
@@ -301,7 +301,7 @@ Nodes:
 
 Ο `AgentCandidateEvaluator` κρατά εκτός graph state:
 
-- development feature matrix και target,
+- training feature matrix και target,
 - immutable shared fold set,
 - estimators και fitted pipeline clones,
 - detailed fold predictions.
@@ -315,8 +315,8 @@ Nodes:
 ## Controlled degradation και experiment lifecycle
 
 Το `ControlledDataDegrader` εφαρμόζει deterministic MCAR missingness μόνο σε deep
-copy του reproducible development sample. Target, source Parquet και temporal
-holdout προστατεύονται. Ο `TransformationAwarePlanQualityEvaluator` εφαρμόζει σε
+copy του reproducible training sample. Target, source Parquet και test
+test dataset προστατεύονται. Ο `TransformationAwarePlanQualityEvaluator` εφαρμόζει σε
 αντίγραφο μόνο quality-relevant actions (numeric/categorical imputation) και
 επανυπολογίζει τον Data Quality Score· scaling, encoding και sampling δεν
 βαφτίζονται λανθασμένα ως quality improvements.
@@ -326,11 +326,11 @@ holdout προστατεύονται. Ο `TransformationAwarePlanQualityEvaluato
 ```text
 shared sample → controlled degradation → conventional shared-fold baseline
 → LangGraph search → locked accepted plan → Agentic shared-fold benchmark
-→ paired Wilcoxon/Holm tests → one-time temporal holdout evaluation
+→ paired Wilcoxon/Holm tests → one-time test dataset evaluation
 ```
 
-Το temporal Parquet δεν διαβάζεται πριν ολοκληρωθεί το graph και επιλεγεί το plan.
-Τα μεγάλα OOF/temporal predictions και checkpoints παραμένουν εκτός Git, ενώ τα
+Το test Parquet δεν διαβάζεται πριν ολοκληρωθεί το graph και επιλεγεί το plan.
+Τα μεγάλα OOF/test predictions και checkpoints παραμένουν εκτός Git, ενώ τα
 compact aggregate metrics, statistical tests, final plan και run summary είναι
 trackable για αναπαραγωγιμότητα.
 

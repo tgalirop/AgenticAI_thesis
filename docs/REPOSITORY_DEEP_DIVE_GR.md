@@ -33,12 +33,12 @@ Streaming CSV → Parquet και schema validation
 Leakage-safe feature engineering
         │
         ▼
-Temporal split ανά πλήρες step
-        ├── Development: steps 1–594, 6.239.040 rows
-        └── Locked temporal holdout: steps 595–743, 123.580 rows
+Chronological split ανά πλήρες step
+        ├── Training: steps 1–594, 6.239.040 rows
+        └── Locked test dataset: steps 595–743, 123.580 rows
                     ▲ ανοίγει μόνο μετά την επιλογή plan
 
-Development → reproducible sample 72.149 rows
+Training → reproducible sample 72.149 rows
              (6.559 fraud + 65.590 normal)
         │
         ▼
@@ -54,7 +54,7 @@ Development → reproducible sample 72.149 rows
 Paired fold comparison (3 models × 25 κοινά folds)
         │
         ▼
-Freeze selected plan → μία τελική temporal αξιολόγηση
+Freeze selected plan → μία τελική test αξιολόγηση
         │
         ▼
 Metrics, statistical tests, plan, telemetry, figures και thesis evidence
@@ -67,9 +67,9 @@ Metrics, statistical tests, plan, telemetry, figures και thesis evidence
 δεν είναι κατάλληλη ως κύρια μετρική: ένα μοντέλο που σχεδόν πάντα προβλέπει
 «normal» μπορεί να έχει πολύ υψηλή Accuracy αλλά να είναι άχρηστο για fraud.
 
-Το temporal split γίνεται με βάση τις 743 διαφορετικές τιμές του `step` και όχι
-με τυχαίο row split. Τα πρώτα 594 steps αποτελούν development και τα τελευταία
-149 temporal test. Όλες οι συναλλαγές ενός step μένουν μαζί. Έτσι δεν βλέπουμε
+Το chronological split γίνεται με βάση τις 743 διαφορετικές τιμές του `step` και όχι
+με τυχαίο row split. Τα πρώτα 594 steps αποτελούν training και τα τελευταία
+149 test dataset. Όλες οι συναλλαγές ενός step μένουν μαζί. Έτσι δεν βλέπουμε
 στο training συναλλαγές που χρονικά ανήκουν μετά από test συναλλαγές.
 
 Οι τελικές κατανομές είναι:
@@ -77,13 +77,13 @@ Metrics, statistical tests, plan, telemetry, figures και thesis evidence
 | Partition | Steps | Rows | Fraud |
 |---|---:|---:|---:|
 | Πλήρες PaySim | 1–743 | 6.362.620 | 8.213 |
-| Development | 1–594 | 6.239.040 | 6.559 |
-| Temporal holdout | 595–743 | 123.580 | 1.654 |
+| Training | 1–594 | 6.239.040 | 6.559 |
+| Test dataset | 595–743 | 123.580 | 1.654 |
 
-Το development sample περιλαμβάνει όλες τις 6.559 fraud εγγραφές και δέκα normal
+Το training sample περιλαμβάνει όλες τις 6.559 fraud εγγραφές και δέκα normal
 ανά fraud, άρα 65.590 normal και 72.149 rows συνολικά. Αυτό μειώνει το πειραματικό
 κόστος χωρίς να πετά καμία θετική περίπτωση. Δεν σημαίνει ότι το πραγματικό fraud
-prevalence έγινε 9,09% στο αρχικό dataset· αυτό ισχύει μόνο στο development sample.
+prevalence έγινε 9,09% στο αρχικό dataset· αυτό ισχύει μόνο στο training sample.
 
 ### Leakage-safe features
 
@@ -146,7 +146,7 @@ audit της πορείας, αλλά οι τελευταίες μετρήσει
 ### `configs/data.yaml`
 
 Δηλώνει τις τέσσερις διαδρομές δεδομένων, target `isFraud`, time column `step`,
-temporal fraction 20% και seed 42. Δεν περιέχει κώδικα, άρα οι διαδρομές και οι
+test fraction 20% και seed 42. Δεν περιέχει κώδικα, άρα οι διαδρομές και οι
 βασικές παράμετροι μπορούν να αλλάξουν αναπαραγώγιμα.
 
 ### `configs/baseline.yaml`
@@ -198,11 +198,11 @@ arbitrary execution. Έτσι ένα λάθος config αποτυγχάνει π
 fields και `isFlaggedFraud`. Λειτουργεί και σε `DataFrame` και σε `LazyFrame`, ώστε
 το production pipeline να μη χρειάζεται να φορτώσει το πλήρες dataset στη RAM.
 
-### `src/agenticai_thesis/data/temporal_split.py`
+### `src/agenticai_thesis/data/dataset_split.py`
 
 Υπολογίζει cutoff από sorted distinct time steps. Το `ceil` κρατά τουλάχιστον το
 ζητούμενο ποσοστό χρόνου στο test, ενώ κάθε side έχει τουλάχιστον ένα step. Το
-`create_temporal_splits` γράφει ανεξάρτητα development/test Parquet και προστατεύει
+`create_dataset_splits` γράφει ανεξάρτητα training/test Parquet και προστατεύει
 τη χρονολογική σειρά.
 
 ### `src/agenticai_thesis/data/__init__.py`
@@ -212,8 +212,8 @@ Package marker και σύντομη περιγραφή. Δεν εκτελεί �
 ### `data/raw/.gitkeep`, `data/processed/.gitkeep`, `data/splits/.gitkeep`
 
 Κρατούν τους άδειους φακέλους στο Git. Τα πραγματικά data files αγνοούνται. Το
-local `paysim.parquet` είναι περίπου 185 MB, το development περίπου 78 MB και το
-temporal holdout περίπου 1,55 MB, αλλά δεν ανεβαίνουν στο GitHub.
+local `paysim.parquet` είναι περίπου 185 MB, το training περίπου 78 MB και το
+test dataset περίπου 1,55 MB, αλλά δεν ανεβαίνουν στο GitHub.
 
 ## 7. Data quality package
 
@@ -229,14 +229,14 @@ Deterministic profiler που δεν χρησιμοποιεί LLM. Παράγε�
 - time range, imbalance risk και resource usage.
 
 Τα queries ομαδοποιούνται για να αποφεύγονται πολλά scans. Ο profiler βλέπει μόνο
-development στο CLI. Το LLM δεν βλέπει raw rows, μόνο compact evidence.
+training στο CLI. Το LLM δεν βλέπει raw rows, μόνο compact evidence.
 
-Πραγματικά development-profile ευρήματα:
+Πραγματικά training-profile ευρήματα:
 
 - 6.239.040 rows, 10 columns, χωρίς missing values·
 - 7.526 ίδιες feature rows (0,121%), όχι αναγκαστικά source duplicates επειδή
   identifiers/balances έχουν αφαιρεθεί·
-- fraud rate 0,105% στο development, άρα modeling risk·
+- fraud rate 0,105% στο training, άρα modeling risk·
 - `amount` skewness 31,24 και μέγιστο 92.445.516,64.
 
 ### `src/agenticai_thesis/quality/quality_metrics.py`
@@ -251,7 +251,7 @@ development στο CLI. Το LLM δεν βλέπει raw rows, μόνο compact 
 ```
 
 Κάθε dimension είναι `1 - failures/opportunities`. Τα weights πρέπει να είναι μη
-αρνητικά και να αθροίζουν ακριβώς σε 1. Το full development score είναι
+αρνητικά και να αθροίζουν ακριβώς σε 1. Το full training score είναι
 0,999758745: completeness/validity/consistency 1, uniqueness 0,998794.
 
 ### `src/agenticai_thesis/quality/degradation.py`
@@ -357,7 +357,7 @@ result πρέπει να έχει plan ενώ invalid result δεν πρέπει
 ### `src/agenticai_thesis/agentic/prompts.py`
 
 Περιέχει τα ακριβή contracts παραμέτρων για κάθε transformation και δημιουργεί
-system/user prompts. Το prompt απαγορεύει Python/shell/SQL/paths, temporal access
+system/user prompts. Το prompt απαγορεύει Python/shell/SQL/paths, test access
 και αδικαιολόγητες ενέργειες. Στέλνει dataset schema, quality evidence, baseline
 metrics/contract, previous feedback και allowlist — ποτέ raw transactions.
 
@@ -398,7 +398,7 @@ runs, επειδή η baseline ήδη χειρίζεται imbalance και samp
 
 Είναι η βασική deterministic πύλη ασφάλειας. Απορρίπτει:
 
-- temporal-test context ή λάθος dataset ID·
+- test dataset context ή λάθος dataset ID·
 - μη allowlisted transformation·
 - άγνωστη/protected/target column·
 - ασύμβατο column type ή invalid/unknown parameter·
@@ -419,7 +419,7 @@ artifact. Δεν γίνεται `eval`, dynamic import ή εκτέλεση LLM c
 
 ### `src/agenticai_thesis/agentic/executor.py`
 
-Δέχεται μόνο valid `ValidationResult`, ίδιο dataset ID και development role. Χτίζει
+Δέχεται μόνο valid `ValidationResult`, ίδιο dataset ID και training role. Χτίζει
 pipeline και επιστρέφει audit record με applied actions και build time. Είναι το
 τελικό guarded boundary πριν από πραγματική ML εκτέλεση.
 
@@ -478,9 +478,9 @@ max iterations, αποτρέποντας infinite loop.
 ### `src/agenticai_thesis/agentic/benchmarking.py`
 
 Μετά την επιλογή plan, το `AgenticPlanBenchmark` υλοποιεί fold metrics/OOF records
-για τα statistical tests. Ο `TemporalHoldoutComparator` fit-άρει frozen
-conventional και Agentic pipelines στο degraded development sample και ανοίγει
-το πλήρες temporal holdout μία φορά.
+για τα statistical tests. Ο `TestDatasetComparator` fit-άρει frozen
+conventional και Agentic pipelines στο degraded training sample και ανοίγει
+το πλήρες test dataset μία φορά.
 
 ### `src/agenticai_thesis/agentic/__init__.py`
 
@@ -490,12 +490,12 @@ Package marker, χωρίς Agent logic.
 
 ### `experiments/run_data_pipeline.py`
 
-Ενοποιεί CSV→Parquet και temporal split, μετά τυπώνει rows/steps/fraud ανά output.
+Ενοποιεί CSV→Parquet και chronological split, μετά τυπώνει rows/steps/fraud ανά output.
 Είναι το Phase-1 CLI.
 
 ### `experiments/run_conventional.py`
 
-Τρέχει standalone conventional benchmark στο καθαρό reproducible development
+Τρέχει standalone conventional benchmark στο καθαρό reproducible training
 sample, γράφει fold/aggregate metrics, OOF predictions, diagnostics και run log.
 Αυτό είναι χρήσιμο ως γενικό baseline, αλλά **δεν είναι** το reference του
 controlled-degradation statistical comparison.
@@ -509,7 +509,7 @@ controlled-degradation statistical comparison.
 3. μετρά degraded conventional baseline·
 4. συνθέτει/τρέχει LangGraph Agent·
 5. κλειδώνει plan και παράγει fold statistics·
-6. τότε μόνο ανοίγει temporal holdout·
+6. τότε μόνο ανοίγει test dataset·
 7. γράφει summary με quality/runtime/memory/LLM usage.
 
 Εδώ γίνεται dependency injection όλων των classes. Το `.env` φορτώνεται χωρίς να
@@ -524,7 +524,7 @@ subprocesses και σταματά στο πρώτο error. Μπορεί να τ
 
 ### `experiments/generate_final_figures.py`
 
-Λεπτό CLI που καλεί τον `ThesisFigureGenerator` με τα επίσημα temporal metrics και
+Λεπτό CLI που καλεί τον `ThesisFigureGenerator` με τα επίσημα test metrics και
 run summary.
 
 ### `experiments/__init__.py`
@@ -619,7 +619,7 @@ Mean/std του selected Agentic plan. PR-AUC:
 Το Decision Tree δεν έχει significant αποτέλεσμα μετά τη correction. Significant
 δεν σημαίνει αυτομάτως πρακτικά μεγάλο ή χρήσιμο αποτέλεσμα.
 
-### `reports/metrics/temporal_holdout_results.csv`
+### `reports/metrics/test_dataset_results.csv`
 
 Οι έξι τελικές out-of-time γραμμές. PR-AUC:
 
@@ -703,11 +703,11 @@ Free Tier configuration, όχι τιμή που επέστρεψε billing API. 
 
 ## 14. Figures — αρχείο προς αρχείο
 
-### `figures/final_comparisons/temporal_pr_auc_comparison.png`
+### `figures/final_comparisons/test_pr_auc_comparison.png`
 
-Grouped bars των έξι temporal PR-AUC. Είναι η κύρια predictive comparison figure.
+Grouped bars των έξι test PR-AUC. Είναι η κύρια predictive comparison figure.
 
-### `figures/final_comparisons/temporal_precision_recall_comparison.png`
+### `figures/final_comparisons/test_precision_recall_comparison.png`
 
 Δείχνει μαζί Precision/Recall και αποκαλύπτει ότι μικρή PR-AUC αύξηση μπορεί να
 συνοδεύεται από περισσότερα false positives στο threshold 0,50.
@@ -729,8 +729,8 @@ retry loop. Είναι code-generated architecture figure.
 
 ### `figures/final_comparisons/high_level_system_architecture.png`
 
-Απεικονίζει όλη τη ροή: raw data, temporal boundary, branches, Groq, shared ML,
-statistics, frozen plan, holdout και thesis outputs.
+Απεικονίζει όλη τη ροή: raw data, test boundary, branches, Groq, shared ML,
+statistics, frozen plan, test dataset και thesis outputs.
 
 ### `figures/confusion_matrices/.gitkeep`, `figures/pr_curves/.gitkeep`,
 ### `figures/roc_curves/.gitkeep`
@@ -767,7 +767,7 @@ walkthrough.
 
 Ελέγχει σωστούς derived υπολογισμούς, αφαίρεση leakage-prone columns και lazy mode.
 
-### `tests/test_temporal_split.py`
+### `tests/test_dataset_split.py`
 
 Ελέγχει ότι κανένα step δεν μοιράζεται σε partitions, ότι το cutoff βασίζεται σε
 distinct steps και ότι invalid fractions απορρίπτονται.
@@ -817,7 +817,7 @@ Mocked HTTP tests για missing key, structured decoding, telemetry, bounded re
 ### `tests/test_validator.py`
 
 Καλύπτει valid plan, unknown action, missing/protected columns, type/parameters,
-temporal prohibition, sampling placement, duplicates, extra fields και registry.
+test prohibition, sampling placement, duplicates, extra fields και registry.
 
 ### `tests/test_executor.py`
 
@@ -831,7 +831,7 @@ fold failures αντί raw crash.
 
 ### `tests/test_candidate_evaluation.py`
 
-Ελέγχει τη σύνθεση quality+ML+memory evidence και απαγόρευση temporal role.
+Ελέγχει τη σύνθεση quality+ML+memory evidence και απαγόρευση test role.
 
 ### `tests/test_feedback.py`
 
@@ -846,7 +846,7 @@ checkpoint round trip και ασφαλή run IDs.
 ### `tests/test_graph.py`
 
 Integration-level tests για accept/checkpoint, invalid→retry→success, rejection
-temporal context πριν από LLM και auditable repeated errors.
+test context πριν από LLM και auditable repeated errors.
 
 ### `tests/test_statistical_tests.py`
 
@@ -873,10 +873,10 @@ Package marker, χωρίς test case.
 
 Υπάρχουν τοπικά αλλά αγνοούνται από Git:
 
-- `data/processed/paysim.parquet`, development και temporal Parquet·
-- `reports/profiles/development_profile.json` και `development_quality.json`·
+- `data/processed/paysim.parquet`, training και test Parquet·
+- `reports/profiles/training_profile.json` και `training_quality.json`·
 - clean `conventional_*` CSV/Parquet outputs·
-- OOF και temporal prediction Parquets·
+- OOF και test prediction Parquets·
 - `artifacts/checkpoints/agentic_*.json` από πολλαπλά runs·
 - diagnostic figures/logs.
 
@@ -908,9 +908,9 @@ MCAR scenario, αλλά δεν σημαίνει 0,1661% βελτίωση fraud d
 και F1, ενώ η PR-AUC ήταν σχεδόν ίδια. Το Decision Tree δεν έδειξε robust paired
 διαφορά. Άρα ο preprocessing effect είναι model-dependent.
 
-### 18.4 Τι προσθέτει το temporal holdout
+### 18.4 Τι προσθέτει το test dataset
 
-Το holdout εξετάζει μεταγενέστερα steps και είναι πιο κοντά σε πραγματικό
+Το test dataset εξετάζει μεταγενέστερα steps και είναι πιο κοντά σε πραγματικό
 deployment shift. Επιβεβαιώνει θετική PR-AUC κατεύθυνση για Logistic/Forest, αλλά
 αρνητική για Tree. Οι Precision/Recall αλλαγές δείχνουν ότι operational αποτέλεσμα
 εξαρτάται και από threshold/costs, όχι μόνο από PR-AUC.
@@ -950,12 +950,12 @@ ablation θα έπρεπε και τα δύο branches να ξεκινούν α�
 Τα repeated-CV training sets επικαλύπτονται. Το paired Wilcoxon είναι χρήσιμο για
 συνεπή fold-level differences, αλλά τα p-values μπορεί να είναι πιο αισιόδοξα από
 ένα πρωτόκολλο με πραγματικά ανεξάρτητα datasets ή nested/repeated experiments.
-Γι' αυτό ερμηνεύουμε μαζί effect size, direction και temporal holdout.
+Γι' αυτό ερμηνεύουμε μαζί effect size, direction και test dataset.
 
-### 19.4 Ένα temporal holdout δεν δίνει κατανομή αβεβαιότητας
+### 19.4 Ένα test dataset δεν δίνει κατανομή αβεβαιότητας
 
-Το temporal CSV δίνει μία out-of-time εκτίμηση. Δεν υπάρχει confidence interval ή
-statistical test πάνω σε πολλαπλά ανεξάρτητα temporal windows.
+Το test CSV δίνει μία out-of-time εκτίμηση. Δεν υπάρχει confidence interval ή
+statistical test πάνω σε πολλαπλά ανεξάρτητα test windows.
 
 ### 19.5 Remote LLM nondeterminism
 
@@ -973,8 +973,8 @@ degradation, όχι το hosted LLM. Γι' αυτό όλα τα συμπεράσ
 ### 19.7 Threshold 0,50
 
 Το fixed threshold κάνει δίκαιη σύγκριση αλλά δεν έχει βελτιστοποιηθεί για business
-costs. Πολύ χαμηλή temporal precision σημαίνει πολλά false positives. Σε παραγωγή
-θα χρειαζόταν threshold selection μόνο πάνω σε development/validation και explicit
+costs. Πολύ χαμηλή test precision σημαίνει πολλά false positives. Σε παραγωγή
+θα χρειαζόταν threshold selection μόνο πάνω σε training/validation και explicit
 cost matrix.
 
 ## 20. Τι μπορείς και τι δεν πρέπει να ισχυριστείς
@@ -983,7 +983,7 @@ cost matrix.
 
 - υλοποιήθηκε πραγματικός LangGraph Agent με loop, state, validation, execution,
   evaluation, feedback, retry/stop και checkpoints·
-- το LLM δεν εκτελεί arbitrary code και δεν βλέπει raw rows/temporal test·
+- το LLM δεν εκτελεί arbitrary code και δεν βλέπει raw rows/test dataset·
 - η controlled missingness αποκαταστάθηκε και το quality score αυξήθηκε·
 - σε αυτό το run οι predictive επιδράσεις ήταν model-dependent·
 - καταγράφηκαν runtime, RSS και LLM usage·

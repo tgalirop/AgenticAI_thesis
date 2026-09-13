@@ -26,11 +26,11 @@ class DataConfig:
 
     raw_csv_path: Path
     parquet_path: Path
-    development_path: Path
-    temporal_test_path: Path
+    training_path: Path
+    test_dataset_path: Path
     target_column: str
     time_column: str
-    temporal_test_fraction: float
+    test_dataset_fraction: float
     random_seed: int
 
 
@@ -94,29 +94,29 @@ def load_data_config(path: str | Path = "configs/data.yaml") -> DataConfig:
     required = {
         "raw_csv_path",
         "parquet_path",
-        "development_path",
-        "temporal_test_path",
+        "training_path",
+        "test_dataset_path",
         "target_column",
         "time_column",
-        "temporal_test_fraction",
+        "test_dataset_fraction",
         "random_seed",
     }
     missing = sorted(required.difference(raw))
     if missing:
         raise ValueError(f"Missing data configuration keys: {', '.join(missing)}")
 
-    test_fraction = float(raw["temporal_test_fraction"])
+    test_fraction = float(raw["test_dataset_fraction"])
     if not 0.0 < test_fraction < 1.0:
-        raise ValueError("'temporal_test_fraction' must be between 0 and 1")
+        raise ValueError("'test_dataset_fraction' must be between 0 and 1")
 
     return DataConfig(
         raw_csv_path=_project_path(raw["raw_csv_path"], "raw_csv_path"),
         parquet_path=_project_path(raw["parquet_path"], "parquet_path"),
-        development_path=_project_path(raw["development_path"], "development_path"),
-        temporal_test_path=_project_path(raw["temporal_test_path"], "temporal_test_path"),
+        training_path=_project_path(raw["training_path"], "training_path"),
+        test_dataset_path=_project_path(raw["test_dataset_path"], "test_dataset_path"),
         target_column=str(raw["target_column"]),
         time_column=str(raw["time_column"]),
-        temporal_test_fraction=test_fraction,
+        test_dataset_fraction=test_fraction,
         random_seed=int(raw["random_seed"]),
     )
 

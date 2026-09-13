@@ -4,7 +4,7 @@ structured_output_only: true
 allow_arbitrary_code_execution: false
 
 # Controlled MCAR degradation is applied only to a reproducible copy of the
-# development sample. The source Parquet and temporal holdout remain untouched.
+# training sample. The source Parquet and test dataset remain untouched.
 degradation:
   random_seed: 42
   missing_rates:

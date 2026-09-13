@@ -31,7 +31,7 @@ class BenchmarkResult:
 
 
 def load_reproducible_sample(
-    development_path: str | Path,
+    training_path: str | Path,
     *,
     target_column: str,
     negative_to_positive_ratio: int,
@@ -40,22 +40,22 @@ def load_reproducible_sample(
     """Load all fraud rows and a fixed random sample of normal transactions.
 
     Sampling occurs once, before constructing CV folds, and the resulting table is
-    passed unchanged to every estimator.  The temporal test file is neither an
-    argument nor read by this function, which protects the final holdout.
+    passed unchanged to every estimator.  The test dataset file is neither an
+    argument nor read by this function, which protects the final test dataset.
     """
 
     if negative_to_positive_ratio < 1:
         raise ValueError("negative_to_positive_ratio must be at least 1")
 
     required_columns = [*MODEL_FEATURES, target_column]
-    lazy = pl.scan_parquet(development_path).select(required_columns)
+    lazy = pl.scan_parquet(training_path).select(required_columns)
     validate_model_features(lazy.collect_schema().names())
 
     fraud = lazy.filter(pl.col(target_column) == 1).collect(engine="streaming")
     normal = lazy.filter(pl.col(target_column) == 0).collect(engine="streaming")
     requested_normal = fraud.height * negative_to_positive_ratio
     if fraud.height == 0:
-        raise ValueError("Development dataset contains no fraud observations")
+        raise ValueError("Training dataset contains no fraud observations")
     if requested_normal > normal.height:
         raise ValueError("Requested more normal observations than are available")
 

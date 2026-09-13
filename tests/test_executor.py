@@ -24,9 +24,9 @@ from agenticai_thesis.agentic.transformations import TransformationRegistry
 from agenticai_thesis.agentic.validator import TransformationPlanValidator
 
 
-def _context(role: DatasetRole = DatasetRole.DEVELOPMENT) -> DatasetContext:
+def _context(role: DatasetRole = DatasetRole.TRAINING) -> DatasetContext:
     return DatasetContext(
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         role=role,
         column_types={
             "amount": ColumnKind.NUMERIC,
@@ -43,7 +43,7 @@ def _executable_plan() -> TransformationPlan:
 
     return TransformationPlan(
         plan_id="plan_001",
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         iteration=1,
         objective="Prepare Logistic Regression features.",
         actions=(
@@ -153,7 +153,7 @@ def test_same_validated_plan_and_seed_produce_identical_predictions() -> None:
 def test_model_scoped_action_is_skipped_for_another_model() -> None:
     plan = TransformationPlan(
         plan_id="plan_scope",
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         iteration=1,
         objective="Test model scoping.",
         actions=(
@@ -192,7 +192,7 @@ def test_executor_rejects_invalid_validation_result() -> None:
         )
 
 
-@pytest.mark.parametrize("role", [DatasetRole.VALIDATION_FOLD, DatasetRole.TEMPORAL_TEST])
+@pytest.mark.parametrize("role", [DatasetRole.VALIDATION_FOLD, DatasetRole.TEST_DATASET])
 def test_executor_rejects_forbidden_dataset_roles(role: DatasetRole) -> None:
     # Build a coherent validated result directly so this test exercises the
     # Executor's independent defence-in-depth check rather than the Validator.

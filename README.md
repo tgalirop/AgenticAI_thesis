@@ -133,9 +133,9 @@ Conventional preprocessing  vs  Agentic AI preprocessing
 ```text
 PaySim
   ↓
-Temporal split
+Chronological split
   ↓
-Development set ──→ Data Profiler ──→ Strategy Generator
+Training set ──→ Data Profiler ──→ Strategy Generator
                                             ↓
                                       Plan Validator
                                             ↓
@@ -147,7 +147,7 @@ Development set ──→ Data Profiler ──→ Strategy Generator
                                             ↺
                                   Best approved pipeline
                                             ↓
-                              Untouched temporal test set
+                              Untouched test dataset
 ```
 
 Ο Agent διατηρεί κατάσταση και ιστορικό, εκτελεί συγκεκριμένες ενέργειες, παρατηρεί και συγκρίνει αποτελέσματα, αλλάζει στρατηγική όταν δεν υπάρχει βελτίωση και τερματίζει βάσει προκαθορισμένων κριτηρίων.
@@ -297,12 +297,12 @@ DQScore = 0.30·Completeness + 0.25·Validity
 
 Χρησιμοποιείται αρχικός χρονικός διαχωρισμός:
 
-- περίπου τα πρώτα 80% των χρονικών βημάτων ως development set,
-- περίπου τα τελευταία 20% ως τελικό temporal test set.
+- περίπου τα πρώτα 80% των χρονικών βημάτων ως training set,
+- περίπου τα τελευταία 20% ως τελικό test dataset.
 
 Το test set δεν χρησιμοποιείται από τον Profiler ή το LLM, ούτε για transformations, feature selection, threshold tuning ή feedback. Το καλύτερο pipeline εφαρμόζεται σε αυτό μόνο μία φορά μετά την ολοκλήρωση του Agentic loop.
 
-Μέσα στο development set χρησιμοποιείται `RepeatedStratifiedKFold`, ενδεικτικά με 5 folds και 5 επαναλήψεις. Όλα τα preprocessing στάδια προσαρμόζονται μόνο στο training μέρος κάθε fold. Το SMOTE, εφόσον επιλεγεί, εφαρμόζεται μόνο μέσα στο training fold.
+Μέσα στο training set χρησιμοποιείται `RepeatedStratifiedKFold`, ενδεικτικά με 5 folds και 5 επαναλήψεις. Όλα τα preprocessing στάδια προσαρμόζονται μόνο στο training μέρος κάθε fold. Το SMOTE, εφόσον επιλεγεί, εφαρμόζεται μόνο μέσα στο training fold.
 
 ## 8. Ενσωμάτωση του κώδικα benchmarking
 
@@ -332,7 +332,7 @@ DQScore = 0.30·Completeness + 0.25·Validity
 - JSON/JSONL για plans και Agent logs,
 - MLflow ή structured experiment logs.
 
-Για τον περιορισμό του κόστους, οι υποψήφιες στρατηγικές μπορούν να αξιολογούνται σε σταθερό development subset που περιλαμβάνει όλες τις fraud περιπτώσεις και αντιπροσωπευτικό δείγμα normal συναλλαγών. Η ίδια δειγματοληψία εφαρμόζεται και στο conventional pipeline.
+Για τον περιορισμό του κόστους, οι υποψήφιες στρατηγικές μπορούν να αξιολογούνται σε σταθερό training subset που περιλαμβάνει όλες τις fraud περιπτώσεις και αντιπροσωπευτικό δείγμα normal συναλλαγών. Η ίδια δειγματοληψία εφαρμόζεται και στο conventional pipeline.
 
 ## 10. Στατιστική σύγκριση
 
@@ -381,7 +381,7 @@ AgenticAI_thesis/
 
 Η ανάπτυξη οργανώνεται σε τρεις φάσεις:
 
-1. **Conventional pipeline:** PaySim → Parquet → temporal split → profiler → ML pipelines → benchmarking.
+1. **Conventional pipeline:** PaySim → Parquet → chronological split → profiler → ML pipelines → benchmarking.
 2. **Agentic AI:** profile → strategy generator → validator → executor → evaluators → feedback.
 3. **Τελικά πειράματα:** conventional vs Agentic και original vs degraded dataset → statistical tests → tables → figures → thesis results.
 
@@ -389,7 +389,7 @@ AgenticAI_thesis/
 
 Το πρώτο λειτουργικό επίπεδο μετατρέπει το πλήρες PaySim CSV σε συμπιεσμένο
 Parquet, δημιουργεί leakage-safe χαρακτηριστικά και πραγματοποιεί χρονικό
-διαχωρισμό σε development και ανέγγιχτο temporal test set.
+διαχωρισμό σε training και ανέγγιχτο test dataset.
 
 Από PowerShell, στη ρίζα του repository:
 
@@ -402,8 +402,8 @@ python -m experiments.run_data_pipeline
 
 ```text
 data/processed/paysim.parquet
-data/splits/development.parquet
-data/splits/temporal_test.parquet
+data/splits/training.parquet
+data/splits/test_dataset.parquet
 ```
 
 Για την εκτέλεση των αυτοματοποιημένων ελέγχων:
@@ -418,8 +418,8 @@ configuration files, ο κώδικας, τα tests και τα κενά director
 
 ### Data Quality Profiler
 
-Ο αυτόνομος profiler αναλύει αποκλειστικά το development set και δεν χρησιμοποιεί
-LLM ή το temporal test set:
+Ο αυτόνομος profiler αναλύει αποκλειστικά το training set και δεν χρησιμοποιεί
+LLM ή το test dataset:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -429,7 +429,7 @@ python -m agenticai_thesis.quality.profiler
 Το report αποθηκεύεται στο:
 
 ```text
-reports/profiles/development_profile.json
+reports/profiles/training_profile.json
 ```
 
 Περιλαμβάνει dimensions, schema, missingness, cardinality, αριθμητικά στατιστικά,
@@ -451,7 +451,7 @@ python -m experiments.run_conventional
 ```
 
 Για την εσωτερική επιλογή στρατηγικής χρησιμοποιούνται όλες οι fraud εγγραφές του
-development set και αναπαραγώγιμο normal sample με αναλογία 10:1. Το sample και τα
+training set και αναπαραγώγιμο normal sample με αναλογία 10:1. Το sample και τα
 5×5 folds είναι κοινά για όλα τα μοντέλα. Παράγονται:
 
 ```text
@@ -467,7 +467,7 @@ logs/conventional/run_summary.json
 Οι μετρικές αυτές αφορούν αποκλειστικά εσωτερικό cross-validation σε dataset με
 τεχνητά αυξημένο fraud prevalence. Δεν αποτελούν τελική εκτίμηση της επίδοσης στον
 πραγματικό πληθυσμό PaySim. Η τελική σύγκριση θα γίνει στο πλήρες, ανέγγιχτο
-temporal holdout, όπου διατηρείται η φυσική κατανομή των κλάσεων.
+test dataset, όπου διατηρείται η φυσική κατανομή των κλάσεων.
 
 ## 12. Τελικά παραδοτέα
 
@@ -482,7 +482,7 @@ temporal holdout, όπου διατηρείται η φυσική κατανομ
 - Feedback loop με έως τρία iterations.
 - Αποθήκευση του καλύτερου pipeline.
 - Logistic Regression, Decision Tree και Random Forest.
-- Repeated cross-validation και τελικό temporal holdout.
+- Repeated cross-validation και τελικό test dataset.
 - Confusion matrices και όλες οι απαιτούμενες μετρικές.
 - Άμεσες μετρικές ποιότητας δεδομένων.
 - Στατιστική σύγκριση conventional και Agentic pipeline.
@@ -544,7 +544,7 @@ metrics. Raw rows, fitted pipelines, estimators και fold predictions παρα
 στον injected `AgentCandidateEvaluator`. Ο evaluator συνθέτει τον ασφαλή Executor,
 τον quality evaluator και τον ML evaluator πάνω στα κοινά cross-validation folds.
 
-Η πρόσβαση σε temporal-test context απορρίπτεται πριν κληθεί το LLM. Invalid plans
+Η πρόσβαση σε test dataset context απορρίπτεται πριν κληθεί το LLM. Invalid plans
 δεν φτάνουν ποτέ στον Executor. Κάθε ολοκληρωμένο iteration αποθηκεύεται atomically
 με plan, validation issues, assessment, feedback, warnings και execution errors.
 
@@ -558,7 +558,7 @@ $env:PYTHONPATH = "src"
 python -m experiments.run_full_experiment
 ```
 
-Όταν τα immutable temporal partitions υπάρχουν ήδη, μπορούν να εκτελεστούν μόνο
+Όταν τα immutable chronological partitions υπάρχουν ήδη, μπορούν να εκτελεστούν μόνο
 τα υπολογιστικά πειραματικά στάδια χωρίς νέα μετατροπή του raw CSV:
 
 ```powershell
@@ -577,7 +577,7 @@ python -m experiments.run_agentic
 ξεχωριστό process με τον ενεργό Python interpreter και σταματά αμέσως αν κάποιο
 στάδιο αποτύχει, ώστε να μη χρησιμοποιηθούν ελλιπή ή παλιά artifacts.
 
-Η τελική πραγματική εκτέλεση χρησιμοποίησε 72.149 development observations, 5×5
+Η τελική πραγματική εκτέλεση χρησιμοποίησε 72.149 training observations, 5×5
 shared repeated-stratified folds και controlled MCAR missingness σε 3.607 τιμές της
 στήλης `type`. Ο Agent έκανε `ACCEPT` στο πρώτο iteration με plan:
 
@@ -588,7 +588,7 @@ shared repeated-stratified folds και controlled MCAR missingness σε 3.607 �
 primary-metric μεταβολή έναντι του degraded conventional baseline ήταν `+0,002429`,
 με runtime multiplier `1,667`, χωρίς παραβίαση Recall/Precision guardrails.
 
-Στο untouched temporal holdout τα PR-AUC αποτελέσματα ήταν:
+Στο untouched test dataset τα PR-AUC αποτελέσματα ήταν:
 
 | Model | Conventional | Agentic | Διαφορά |
 |---|---:|---:|---:|
@@ -599,7 +599,7 @@ primary-metric μεταβολή έναντι του degraded conventional baseli
 Τα αποτελέσματα δείχνουν ότι η βελτίωση ποιότητας δεν συνεπάγεται ομοιόμορφη
 βελτίωση κάθε classifier. Η επίδραση ήταν θετική στη Logistic Regression και στο
 Random Forest PR-AUC, αλλά αρνητική στο Decision Tree. Τα
-πλήρη fold metrics, temporal metrics και Holm-corrected Wilcoxon tests βρίσκονται
+πλήρη fold metrics, test metrics και Holm-corrected Wilcoxon tests βρίσκονται
 στο `reports/`.
 
 ### Χρήση μνήμης και LLM
@@ -628,7 +628,7 @@ prompts, responses ή API secrets στο telemetry.
 ### Τελικά figures για τη συγγραφή
 
 Τα publication-ready συγκριτικά figures δημιουργούνται αποκλειστικά από τα
-τελικά temporal metrics και το Agentic run summary:
+τελικά test metrics και το Agentic run summary:
 
 ```powershell
 $env:PYTHONPATH = "src"
@@ -637,13 +637,13 @@ python -m experiments.generate_final_figures
 
 Ο φάκελος `figures/final_comparisons/` περιέχει:
 
-- temporal PR-AUC σύγκριση Conventional–Agentic ανά classifier,
-- temporal Precision/Recall σύγκριση,
+- test PR-AUC σύγκριση Conventional–Agentic ανά classifier,
+- test Precision/Recall σύγκριση,
 - Data Quality Score πριν και μετά το επιλεγμένο plan,
 - runtime multiplier έναντι του conventional baseline,
 - το πραγματικά υλοποιημένο LangGraph workflow με validation και retry routing.
 - high-level αρχιτεκτονική ολόκληρου του experimental workflow, από το raw PaySim
-  έως το temporal holdout και τα τελικά thesis outputs.
+  έως το test dataset και τα τελικά thesis outputs.
 
 ## 14. Μεθοδολογικό συμπέρασμα
 

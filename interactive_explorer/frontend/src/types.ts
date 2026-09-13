@@ -86,7 +86,7 @@ export interface ExplorerPayload {
     oof_curves: CurveRow[];
     curve_note: string;
   };
-  temporal_evaluation: {
+  test_evaluation: {
     metrics: MetricRow[];
     curves: CurveRow[];
     confusion_matrices: ConfusionMatrixRow[];

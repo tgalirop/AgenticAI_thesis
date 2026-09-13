@@ -17,7 +17,7 @@ from agenticai_thesis.modeling.thresholds import save_diagnostic_plots
 
 
 def main() -> None:
-    """Sample development data, run shared CV, and persist every artifact."""
+    """Sample training data, run shared CV, and persist every artifact."""
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-config", default="configs/data.yaml")
@@ -28,9 +28,9 @@ def main() -> None:
     seed = int(baseline["cross_validation"]["random_seed"])
     started = time.perf_counter()
 
-    print("1/4 Creating the shared reproducible development sample...")
+    print("1/4 Creating the shared reproducible training sample...")
     sample = load_reproducible_sample(
-        data_config.development_path,
+        data_config.training_path,
         target_column=data_config.target_column,
         negative_to_positive_ratio=int(baseline["sampling"]["negative_to_positive_ratio"]),
         random_seed=seed,

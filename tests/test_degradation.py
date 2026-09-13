@@ -31,8 +31,8 @@ def _frame() -> pd.DataFrame:
 
 def _context() -> DatasetContext:
     return DatasetContext(
-        dataset_id="development-v1",
-        role=DatasetRole.DEVELOPMENT,
+        dataset_id="training-v1",
+        role=DatasetRole.TRAINING,
         column_types={
             "amount": ColumnKind.NUMERIC,
             "type": ColumnKind.CATEGORICAL,
@@ -72,7 +72,7 @@ def test_imputation_plan_improves_measured_completeness() -> None:
     initial = evaluator.initial_quality()
     plan = TransformationPlan(
         plan_id="repair_001",
-        dataset_id="development-v1",
+        dataset_id="training-v1",
         iteration=1,
         objective="Repair controlled missingness.",
         actions=(

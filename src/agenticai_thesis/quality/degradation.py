@@ -11,7 +11,7 @@ import pandas as pd
 
 @dataclass(frozen=True, slots=True)
 class ControlledDegradationConfig:
-    """Missingness rates injected per development feature."""
+    """Missingness rates injected per training feature."""
 
     missing_rates: Mapping[str, float]
     random_seed: int = 42

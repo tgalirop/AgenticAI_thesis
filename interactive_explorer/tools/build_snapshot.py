@@ -90,10 +90,10 @@ def curve_payload(y_true: np.ndarray, y_score: np.ndarray) -> dict[str, Any]:
     }
 
 
-def temporal_curves(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Create final holdout curves and verify them against official metric rows."""
+def test_curves(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Create final test dataset curves and verify them against official metric rows."""
 
-    predictions_path = REPORTS / "metrics" / "temporal_holdout_predictions.parquet"
+    predictions_path = REPORTS / "metrics" / "test_dataset_predictions.parquet"
     predictions = pl.read_parquet(predictions_path)
     results: list[dict[str, Any]] = []
     for metric in metrics:
@@ -103,9 +103,9 @@ def temporal_curves(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
         curve = curve_payload(subset["y_true"].to_numpy(), subset["y_score"].to_numpy())
         # A mismatch would make the visual evidence scientifically unsafe, so fail.
         if not np.isclose(curve["pr_auc"], float(metric["pr_auc"]), atol=1e-10):
-            raise ValueError(f"PR-AUC mismatch for temporal {pipeline}/{model}")
+            raise ValueError(f"PR-AUC mismatch for test {pipeline}/{model}")
         if not np.isclose(curve["roc_auc"], float(metric["roc_auc"]), atol=1e-10):
-            raise ValueError(f"ROC-AUC mismatch for temporal {pipeline}/{model}")
+            raise ValueError(f"ROC-AUC mismatch for test {pipeline}/{model}")
         results.append(
             {
                 "pipeline": pipeline,
@@ -119,7 +119,7 @@ def temporal_curves(metrics: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def oof_curves() -> list[dict[str, Any]]:
-    """Create pooled out-of-fold development curves for both compared pipelines."""
+    """Create pooled out-of-fold training curves for both compared pipelines."""
 
     paths = {
         "conventional": REPORTS / "metrics" / "degraded_conventional_oof_predictions.parquet",
@@ -200,28 +200,28 @@ def workflow_steps() -> list[dict[str, Any]]:
             "source_files": ["src/agenticai_thesis/data/features.py"],
         },
         {
-            "id": "temporal",
+            "id": "test",
             "order": 4,
-            "title": "Temporal split ανά πλήρες step",
-            "short": "Steps 1–594 για development και 595–743 για κλειδωμένο holdout.",
+            "title": "Chronological split ανά πλήρες step",
+            "short": "Steps 1–594 για training και 595–743 για κλειδωμένο test dataset.",
             "why": "Προσομοιώνει εκπαίδευση στο παρελθόν και πρόβλεψη σε μεταγενέστερες συναλλαγές.",
-            "how": "Τα 743 διακριτά steps ταξινομούνται χρονικά. Τα πρώτα 594 μπαίνουν στο development και τα τελευταία 149 στο holdout, κρατώντας ολόκληρο κάθε step στη μία πλευρά.",
+            "how": "Τα 743 διακριτά steps ταξινομούνται χρονικά. Τα πρώτα 594 μπαίνουν στο training και τα τελευταία 149 στο test dataset, κρατώντας ολόκληρο κάθε step στη μία πλευρά.",
             "avoids": "Αποφεύγουμε να εκπαιδευτεί το μοντέλο σε συναλλαγές που χρονικά ανήκουν μετά από συναλλαγές αξιολόγησης.",
             "takeaway": "Το 80/20 αφορά τα χρονικά steps και όχι το 80/20 των γραμμών, γι’ αυτό τα δύο partitions έχουν πολύ διαφορετικό πλήθος rows.",
             "input": "Prepared full dataset",
-            "output": "Development + locked temporal holdout",
-            "source_files": ["src/agenticai_thesis/data/temporal_split.py"],
+            "output": "Training + locked test dataset",
+            "source_files": ["src/agenticai_thesis/data/dataset_split.py"],
         },
         {
             "id": "sample",
             "order": 5,
-            "title": "Reproducible development sample",
+            "title": "Reproducible training sample",
             "short": "Όλα τα 6.559 fraud και 65.590 τυχαία normal, με seed 42.",
             "why": "Κάνει εφικτές τις επαναλαμβανόμενες εκπαιδεύσεις και διατηρεί όλα τα fraud cases.",
-            "how": "Κρατάμε όλα τα fraud του development και επιλέγουμε τυχαία δέκα normal ανά fraud με σταθερό seed 42. Μετά ανακατεύουμε αναπαραγώγιμα τις γραμμές.",
+            "how": "Κρατάμε όλα τα fraud του training και επιλέγουμε τυχαία δέκα normal ανά fraud με σταθερό seed 42. Μετά ανακατεύουμε αναπαραγώγιμα τις γραμμές.",
             "avoids": "Αποφεύγουμε τεράστιο υπολογιστικό κόστος και validation folds με ελάχιστα fraud, χωρίς να πετάμε κανένα διαθέσιμο fraud case.",
             "takeaway": "Το sample είναι ερευνητικό training/validation set με τεχνητή prevalence· δεν αναπαριστά τη φυσική συχνότητα απάτης.",
-            "input": "6.239.040 development rows",
+            "input": "6.239.040 training rows",
             "output": "72.149 rows με αναλογία normal:fraud 10:1",
             "source_files": ["src/agenticai_thesis/modeling/benchmark.py"],
         },
@@ -231,10 +231,10 @@ def workflow_steps() -> list[dict[str, Any]]:
             "title": "5% MCAR degradation",
             "short": "3.607 τυχαίες τιμές της type γίνονται missing σε deep copy.",
             "why": "Δημιουργεί ελεγχόμενο και αναπαραγώγιμο πρόβλημα ποιότητας δεδομένων.",
-            "how": "Σε deep copy του sample επιλέγονται τυχαία 3.607 row positions και μόνο η type γίνεται null. Το αρχικό sample και το temporal holdout δεν αλλάζουν.",
+            "how": "Σε deep copy του sample επιλέγονται τυχαία 3.607 row positions και μόνο η type γίνεται null. Το αρχικό sample και το test dataset δεν αλλάζουν.",
             "avoids": "Αποφεύγουμε άγνωστη ή μη επαναλήψιμη βλάβη και εξασφαλίζουμε ότι τα δύο pipelines αντιμετωπίζουν ακριβώς τα ίδια missing cells.",
             "takeaway": "MCAR σημαίνει ότι η πιθανότητα να γίνει μια τιμή missing δεν εξαρτάται από type, fraud label ή άλλα χαρακτηριστικά.",
-            "input": "Clean development sample",
+            "input": "Clean training sample",
             "output": "Shared degraded sample",
             "source_files": ["src/agenticai_thesis/quality/degradation.py"],
         },
@@ -282,24 +282,24 @@ def workflow_steps() -> list[dict[str, Any]]:
             "order": 10,
             "title": "Freeze selected plan",
             "short": "Το plan-1 γίνεται ACCEPT στην πρώτη iteration και κλειδώνει.",
-            "why": "Απαγορεύει αλλαγές μετά την αποκάλυψη του final holdout.",
-            "how": "Με βάση μόνο development quality και CV evidence το feedback επιστρέφει ACCEPT. Καταγράφεται το plan-1 και η στρατηγική του δεν επιτρέπεται να αλλάξει στο temporal test.",
+            "why": "Απαγορεύει αλλαγές μετά την αποκάλυψη του final test dataset.",
+            "how": "Με βάση μόνο training quality και CV evidence το feedback επιστρέφει ACCEPT. Καταγράφεται το plan-1 και η στρατηγική του δεν επιτρέπεται να αλλάξει στο test dataset.",
             "avoids": "Αποφεύγουμε test leakage και εκ των υστέρων επιλογή plan επειδή έτυχε να αποδώσει καλύτερα στις τελικές συναλλαγές.",
             "takeaway": "Παγώνει η μέθοδος most_frequent + one-hot, όχι οι learned τιμές· imputer, encoder και classifier κάνουν νέο fit μόνο στα training δεδομένα.",
-            "input": "Development evidence and feedback guardrails",
+            "input": "Training evidence and feedback guardrails",
             "output": "Frozen validated plan",
             "source_files": ["experiments/run_agentic.py", "reports/transformation_plans/plan-1.json"],
         },
         {
-            "id": "holdout",
+            "id": "test_dataset",
             "order": 11,
-            "title": "Final temporal evaluation",
+            "title": "Final test evaluation",
             "short": "Μία αξιολόγηση σε 123.580 καθαρές, μεταγενέστερες συναλλαγές.",
             "why": "Εξετάζει out-of-time γενίκευση σε φυσική class prevalence.",
-            "how": "Κάθε frozen pipeline κάνει fit στο ίδιο degraded sample και predict_proba στις ίδιες 123.580 μεταγενέστερες, καθαρές γραμμές. Το holdout χρησιμοποιείται μόνο για transform/predict.",
+            "how": "Κάθε frozen pipeline κάνει fit στο ίδιο degraded sample και predict_proba στις ίδιες 123.580 μεταγενέστερες, καθαρές γραμμές. Το test dataset χρησιμοποιείται μόνο για transform/predict.",
             "avoids": "Αποφεύγουμε αισιόδοξη τελική εκτίμηση από το enriched 10:1 sample και οποιαδήποτε προσαρμογή στις τελικές απαντήσεις.",
-            "takeaway": "Το holdout είναι μεγαλύτερο από το training sample χωρίς να υπάρχει πρόβλημα· η ισότητα που απαιτείται είναι ίδιο train/test για τα δύο pipelines, όχι ίδιο πλήθος train και test rows.",
-            "input": "Models fitted on degraded sample + untouched holdout",
+            "takeaway": "Το test dataset είναι μεγαλύτερο από το training sample χωρίς να υπάρχει πρόβλημα· η ισότητα που απαιτείται είναι ίδιο train/test για τα δύο pipelines, όχι ίδιο πλήθος train και test rows.",
+            "input": "Models fitted on degraded sample + untouched test dataset",
             "output": "Final metrics, predictions and confusion matrices",
             "source_files": ["src/agenticai_thesis/agentic/benchmarking.py"],
         },
@@ -329,7 +329,7 @@ def langgraph_payload(run: dict[str, Any], plan_record: dict[str, Any]) -> dict[
         {
             "id": "prepare_iteration", "label": "Prepare iteration", "kind": "deterministic_guard", "x": 80, "y": 210,
             "reads": ["agent_state", "dataset_context"], "writes": [],
-            "responsibility": "Ελέγχει ότι το run είναι RUNNING, ότι βρισκόμαστε σε development data, ότι τα dataset IDs συμφωνούν και ότι απομένει iteration.",
+            "responsibility": "Ελέγχει ότι το run είναι RUNNING, ότι βρισκόμαστε σε training data, ότι τα dataset IDs συμφωνούν και ότι απομένει iteration.",
             "why": "Είναι fail-closed πύλη: λανθασμένο context σταματά πριν εκτεθεί οτιδήποτε στο LLM.",
             "implementation": "PrepareIterationNode",
         },
@@ -389,7 +389,7 @@ def langgraph_payload(run: dict[str, Any], plan_record: dict[str, Any]) -> dict[
         {"source": "record_iteration", "target": "END", "label": "completed", "condition": True},
     ]
     official_trace = [
-        {"node": "prepare_iteration", "title": "Ασφαλές development context", "detail": "Role=development, dataset_id συμφωνεί, iteration 1/3 διαθέσιμη.", "state_change": "Καμία μεταβολή· guard passed."},
+        {"node": "prepare_iteration", "title": "Ασφαλές training context", "detail": "Role=training, dataset_id συμφωνεί, iteration 1/3 διαθέσιμη.", "state_change": "Καμία μεταβολή· guard passed."},
         {"node": "generate_strategy", "title": "Μία LLM πρόταση", "detail": f"Το LLM είδε 3.607 missing στη type και επέστρεψε {plan['plan_id']} με {len(plan['actions'])} actions.", "state_change": "current_plan = plan-1"},
         {"node": "validate_strategy", "title": "Το plan εγκρίθηκε", "detail": "Οι actions impute_categorical και one_hot_encode είναι allowlisted, η type υπάρχει και δεν είναι protected.", "state_change": "current_validation.is_valid = true"},
         {"node": "evaluate_candidate", "title": "Deterministic εκτέλεση και CV", "detail": f"Quality={assessment['data_quality_score']:.6f}. Όλα τα 3 μοντέλα ολοκλήρωσαν επιτυχώς.", "state_change": "current_assessment = quality + ML + cost evidence"},
@@ -438,17 +438,17 @@ def build_snapshot() -> dict[str, Any]:
 
     run = read_json(REPO_ROOT / "logs" / "agentic" / "run_summary.json")
     plan_record = read_json(REPORTS / "transformation_plans" / "plan-1.json")
-    temporal_metrics = label_rows(read_csv(REPORTS / "metrics" / "temporal_holdout_results.csv"))
+    test_metrics = label_rows(read_csv(REPORTS / "metrics" / "test_dataset_results.csv"))
     agentic_results = label_rows(read_csv(REPORTS / "metrics" / "agentic_results.csv"))
     conventional_results = label_rows(
         read_csv(REPORTS / "metrics" / "degraded_conventional_results.csv")
     )
     paired_tests = label_rows(read_csv(REPORTS / "statistical_tests" / "paired_results.csv"))
-    development_fraud = 6_559
-    temporal_fraud = 1_654
+    training_fraud = 6_559
+    test_fraud = 1_654
     sample_fraud = 6_559
     sample_normal = 65_590
-    temporal_rows = 123_580
+    test_rows = 123_580
 
     return {
         "snapshot_version": "1.0.0",
@@ -474,13 +474,13 @@ def build_snapshot() -> dict[str, Any]:
             ),
             "experiment_layers": [
                 {
-                    "title": "Ελεγχόμενο development πείραμα",
+                    "title": "Ελεγχόμενο training πείραμα",
                     "question": "Τι αλλάζει όταν οι δύο μέθοδοι αντιμετωπίζουν τα ίδια 5% MCAR missing values;",
                     "evidence": "25 paired folds ανά μοντέλο στο ίδιο degraded 10:1 sample.",
                     "allowed_conclusion": "Μπορούμε να συγκρίνουμε τη μέση fold-level επίδραση και τη σταθερότητά της.",
                 },
                 {
-                    "title": "Τελικός temporal έλεγχος",
+                    "title": "Τελικός test έλεγχος",
                     "question": "Γενικεύουν τα frozen pipelines σε μεταγενέστερες συναλλαγές φυσικής prevalence;",
                     "evidence": "Μία κοινή αξιολόγηση στις 123.580 γραμμές των steps 595–743.",
                     "allowed_conclusion": "Μπορούμε να περιγράψουμε out-of-time επίδοση, όχι να κάνουμε νέο paired significance test.",
@@ -502,7 +502,7 @@ def build_snapshot() -> dict[str, Any]:
                 {"term": "Paired comparison", "plain": "Αφαιρούμε Conventional από Agentic μέσα στο ίδιο fold.", "why": "Κοινές validation γραμμές ακυρώνουν μεγάλο μέρος του θορύβου δυσκολίας μεταξύ folds."},
                 {"term": "p-value", "plain": "Πόσο ασύμβατη είναι η παρατηρούμενη διαφορά με την υπόθεση ότι δεν υπάρχει συστηματική διαφορά.", "why": "Δεν είναι η πιθανότητα ότι το Agentic είναι καλύτερο και δεν μετρά το μέγεθος του οφέλους."},
                 {"term": "Holm correction", "plain": "Αυστηρότερη προσαρμογή των p-values όταν κάνουμε πολλούς ελέγχους.", "why": "Περιορίζει τα τυχαία σημαντικά ευρήματα από πολλαπλές model/metric συγκρίσεις."},
-                {"term": "Temporal holdout", "plain": "Μεταγενέστερες συναλλαγές που μένουν κλειδωμένες μέχρι να παγώσει η μέθοδος.", "why": "Προσεγγίζει το πραγματικό σενάριο εκπαίδευσης στο παρελθόν και πρόβλεψης στο μέλλον."},
+                {"term": "Test dataset", "plain": "Μεταγενέστερες συναλλαγές που μένουν κλειδωμένες μέχρι να παγώσει η μέθοδος.", "why": "Προσεγγίζει το πραγματικό σενάριο εκπαίδευσης στο παρελθόν και πρόβλεψης στο μέλλον."},
                 {"term": "Data leakage", "plain": "Χρήση πληροφορίας από validation/test ή το μέλλον κατά την εκπαίδευση.", "why": "Δίνει υπερβολικά αισιόδοξη επίδοση που δεν επαναλαμβάνεται σε άγνωστα δεδομένα."},
                 {"term": "MCAR", "plain": "Missing Completely At Random: οι θέσεις που χαλάνε επιλέγονται ανεξάρτητα από τις τιμές και το label.", "why": "Προσφέρει απλό, ελεγχόμενο πρώτο σενάριο data-quality degradation."},
             ],
@@ -511,17 +511,17 @@ def build_snapshot() -> dict[str, Any]:
         "workflow": workflow_steps(),
         "datasets": {
             "raw": {"rows": 6_362_620, "fraud": 8_213, "normal": 6_354_407, "steps": 743},
-            "development": {
+            "training": {
                 "rows": 6_239_040,
-                "fraud": development_fraud,
-                "normal": 6_239_040 - development_fraud,
+                "fraud": training_fraud,
+                "normal": 6_239_040 - training_fraud,
                 "step_start": 1,
                 "step_end": 594,
             },
-            "temporal_holdout": {
-                "rows": temporal_rows,
-                "fraud": temporal_fraud,
-                "normal": temporal_rows - temporal_fraud,
+            "test_dataset": {
+                "rows": test_rows,
+                "fraud": test_fraud,
+                "normal": test_rows - test_fraud,
                 "step_start": 595,
                 "step_end": 743,
                 "role": "untouched final out-of-time test",
@@ -536,9 +536,9 @@ def build_snapshot() -> dict[str, Any]:
             },
             "prevalence": [
                 {"dataset": "Raw PaySim", "value": 8_213 / 6_362_620},
-                {"dataset": "Development", "value": development_fraud / 6_239_040},
+                {"dataset": "Training", "value": training_fraud / 6_239_040},
                 {"dataset": "10:1 sample", "value": sample_fraud / (sample_fraud + sample_normal)},
-                {"dataset": "Temporal holdout", "value": temporal_fraud / temporal_rows},
+                {"dataset": "Test dataset", "value": test_fraud / test_rows},
             ],
         },
         "quality": {
@@ -548,7 +548,7 @@ def build_snapshot() -> dict[str, Any]:
                 "rate": 0.05,
                 "affected_rows": int(run["degradation"]["type"]),
                 "seed": 42,
-                "scope": "development sample deep copy only",
+                "scope": "training sample deep copy only",
             },
             "before_score": float(run["initial_data_quality_score"]),
             "after_score": float(run["selected_data_quality_score"]),
@@ -565,13 +565,13 @@ def build_snapshot() -> dict[str, Any]:
             "significant_tests": [row for row in paired_tests if row["significant_0_05"]],
             "oof_curves": oof_curves(),
             "curve_note": (
-                "Οι development καμπύλες είναι pooled out-of-fold predictions από 5 repetitions. "
+                "Οι training καμπύλες είναι pooled out-of-fold predictions από 5 repetitions. "
                 "Οι aggregate πίνακες αναφέρουν mean ± std των 25 folds."
             ),
         },
-        "temporal_evaluation": {
-            "metrics": temporal_metrics,
-            "curves": temporal_curves(temporal_metrics),
+        "test_evaluation": {
+            "metrics": test_metrics,
+            "curves": test_curves(test_metrics),
             "confusion_matrices": [
                 {
                     "pipeline": row["pipeline"],
@@ -584,11 +584,11 @@ def build_snapshot() -> dict[str, Any]:
                     "fn": row["fn"],
                     "tp": row["tp"],
                 }
-                for row in temporal_metrics
+                for row in test_metrics
             ],
             "interpretation": (
                 "Και τα δύο pipelines εκπαιδεύονται στο ίδιο degraded 10:1 sample και "
-                "αξιολογούνται στο ίδιο καθαρό temporal holdout. Το holdout δεν συμμετέχει "
+                "αξιολογούνται στο ίδιο καθαρό test dataset. Το test dataset δεν συμμετέχει "
                 "στα paired statistical tests."
             ),
         },
@@ -607,10 +607,10 @@ def build_snapshot() -> dict[str, Any]:
         },
         "caveats": [
             "Το επίσημο πείραμα καλύπτει μόνο 5% MCAR missingness στη στήλη type.",
-            "Το development sample έχει τεχνητή αναλογία 10:1 και οι μετρικές του δεν συγκρίνονται αριθμητικά με τις temporal μετρικές φυσικής prevalence.",
-            "Το temporal holdout παραμένει καθαρό: εξετάζεται training σε degraded ιστορικά δεδομένα και inference σε καθαρά μελλοντικά δεδομένα.",
+            "Το training sample έχει τεχνητή αναλογία 10:1 και οι μετρικές του δεν συγκρίνονται αριθμητικά με τις test μετρικές φυσικής prevalence.",
+            "Το test dataset παραμένει καθαρό: εξετάζεται training σε degraded ιστορικά δεδομένα και inference σε καθαρά μελλοντικά δεδομένα.",
             "Τα 25 repeated folds είναι συζευγμένες επαναδειγματοληψίες του ίδιου sample, όχι 25 ανεξάρτητα datasets.",
-            "Μία temporal περίοδος δίνει μία out-of-time εκτίμηση και όχι confidence interval από πολλαπλά χρονικά windows.",
+            "Μία test περίοδος δίνει μία out-of-time εκτίμηση και όχι confidence interval από πολλαπλά χρονικά windows.",
             "Στο τελικό plan η Logistic Regression δεν έχει το StandardScaler του conventional pipeline, άρα η διαφορά της δεν αποδίδεται μόνο στην imputation.",
             "Στατιστική σημαντικότητα δεν συνεπάγεται μεγάλη ή επιχειρησιακά σημαντική βελτίωση.",
         ],
@@ -628,7 +628,7 @@ def main() -> None:
     )
     print(f"Explorer snapshot written: {OUTPUT.relative_to(REPO_ROOT)}")
     print(f"Source run: {snapshot['source_run_id']}")
-    print(f"Temporal curves: {len(snapshot['temporal_evaluation']['curves'])}")
+    print(f"Test curves: {len(snapshot['test_evaluation']['curves'])}")
     print(f"OOF curves: {len(snapshot['cross_validation']['oof_curves'])}")
 
 

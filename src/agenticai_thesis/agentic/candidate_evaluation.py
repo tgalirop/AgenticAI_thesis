@@ -40,7 +40,7 @@ class PlanQualityEvaluation:
 
 @runtime_checkable
 class PlanQualityEvaluatorProtocol(Protocol):
-    """Measure quality after applying a plan to development/training data only."""
+    """Measure quality after applying a plan to training/training data only."""
 
     def evaluate(
         self,
@@ -93,8 +93,8 @@ class AgentCandidateEvaluator:
 
         if not validation.is_valid or validation.plan is None:
             raise ValueError("AgentCandidateEvaluator requires a valid plan")
-        if dataset_context.role != DatasetRole.DEVELOPMENT:
-            raise ValueError("Candidate evaluation is permitted only on development data")
+        if dataset_context.role != DatasetRole.TRAINING:
+            raise ValueError("Candidate evaluation is permitted only on training data")
 
         plan = validation.plan
         model_outcomes: list[ModelOutcome] = []

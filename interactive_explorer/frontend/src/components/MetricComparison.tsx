@@ -19,7 +19,7 @@ export function MetricComparison({ rows, metric, title, insight }: MetricCompari
     };
   });
   return (
-    <ChartFrame title={title} subtitle="Conventional και Agentic αξιολογούνται στις ίδιες 123.580 temporal γραμμές." insight={insight} caution="η ψηλότερη μπάρα αποδεικνύει καθολική υπεροχή. Πρέπει να εξετάσουμε το μέγεθος delta, το μοντέλο, τη μετρική και τα false positives/negatives.">
+    <ChartFrame title={title} subtitle="Conventional και Agentic αξιολογούνται στις ίδιες 123.580 test γραμμές." insight={insight} caution="η ψηλότερη μπάρα αποδεικνύει καθολική υπεροχή. Πρέπει να εξετάσουμε το μέγεθος delta, το μοντέλο, τη μετρική και τα false positives/negatives.">
       <ResponsiveContainer width="100%" height={310}>
         <BarChart data={data} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" vertical={false} />

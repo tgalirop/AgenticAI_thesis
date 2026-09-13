@@ -26,7 +26,7 @@ def convert_csv_to_parquet(csv_path: str | Path, parquet_path: str | Path) -> Pa
     destination.parent.mkdir(parents=True, exist_ok=True)
 
     # Zstandard gives a useful storage reduction while retaining fast reads.
-    # Statistics enable predicate pushdown in later temporal/filtering queries.
+    # Statistics enable predicate pushdown in later test/filtering queries.
     lazy_frame.sink_parquet(
         destination,
         compression="zstd",

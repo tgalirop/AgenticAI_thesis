@@ -44,7 +44,7 @@ reports/**/*.parquet
 !reports/metrics/agentic_fold_results.csv
 !reports/metrics/degraded_conventional_results.csv
 !reports/metrics/degraded_conventional_fold_results.csv
-!reports/metrics/temporal_holdout_results.csv
+!reports/metrics/test_dataset_results.csv
 !reports/statistical_tests/paired_results.csv
 !reports/profiles/controlled_degradation.json
 !reports/transformation_plans/*.json

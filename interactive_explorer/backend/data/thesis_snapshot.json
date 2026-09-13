@@ -40,13 +40,13 @@
     "central_question": "Μπορεί ένας ελεγχόμενος LangGraph Agent να προτείνει ασφαλές preprocessing για ένα γνωστό πρόβλημα ποιότητας και να διατηρήσει ή να βελτιώσει την ανίχνευση απάτης σε σχέση με ένα συμβατικό pipeline;",
     "experiment_layers": [
       {
-        "title": "Ελεγχόμενο development πείραμα",
+        "title": "Ελεγχόμενο training πείραμα",
         "question": "Τι αλλάζει όταν οι δύο μέθοδοι αντιμετωπίζουν τα ίδια 5% MCAR missing values;",
         "evidence": "25 paired folds ανά μοντέλο στο ίδιο degraded 10:1 sample.",
         "allowed_conclusion": "Μπορούμε να συγκρίνουμε τη μέση fold-level επίδραση και τη σταθερότητά της."
       },
       {
-        "title": "Τελικός temporal έλεγχος",
+        "title": "Τελικός test έλεγχος",
         "question": "Γενικεύουν τα frozen pipelines σε μεταγενέστερες συναλλαγές φυσικής prevalence;",
         "evidence": "Μία κοινή αξιολόγηση στις 123.580 γραμμές των steps 595–743.",
         "allowed_conclusion": "Μπορούμε να περιγράψουμε out-of-time επίδοση, όχι να κάνουμε νέο paired significance test."
@@ -129,7 +129,7 @@
         "why": "Περιορίζει τα τυχαία σημαντικά ευρήματα από πολλαπλές model/metric συγκρίσεις."
       },
       {
-        "term": "Temporal holdout",
+        "term": "Test dataset",
         "plain": "Μεταγενέστερες συναλλαγές που μένουν κλειδωμένες μέχρι να παγώσει η μέθοδος.",
         "why": "Προσεγγίζει το πραγματικό σενάριο εκπαίδευσης στο παρελθόν και πρόβλεψης στο μέλλον."
       },
@@ -161,7 +161,7 @@
           "dataset_context"
         ],
         "writes": [],
-        "responsibility": "Ελέγχει ότι το run είναι RUNNING, ότι βρισκόμαστε σε development data, ότι τα dataset IDs συμφωνούν και ότι απομένει iteration.",
+        "responsibility": "Ελέγχει ότι το run είναι RUNNING, ότι βρισκόμαστε σε training data, ότι τα dataset IDs συμφωνούν και ότι απομένει iteration.",
         "why": "Είναι fail-closed πύλη: λανθασμένο context σταματά πριν εκτεθεί οτιδήποτε στο LLM.",
         "implementation": "PrepareIterationNode"
       },
@@ -368,8 +368,8 @@
     "official_trace": [
       {
         "node": "prepare_iteration",
-        "title": "Ασφαλές development context",
-        "detail": "Role=development, dataset_id συμφωνεί, iteration 1/3 διαθέσιμη.",
+        "title": "Ασφαλές training context",
+        "detail": "Role=training, dataset_id συμφωνεί, iteration 1/3 διαθέσιμη.",
         "state_change": "Καμία μεταβολή· guard passed."
       },
       {
@@ -534,30 +534,30 @@
       ]
     },
     {
-      "id": "temporal",
+      "id": "test",
       "order": 4,
-      "title": "Temporal split ανά πλήρες step",
-      "short": "Steps 1–594 για development και 595–743 για κλειδωμένο holdout.",
+      "title": "Chronological split ανά πλήρες step",
+      "short": "Steps 1–594 για training και 595–743 για κλειδωμένο test dataset.",
       "why": "Προσομοιώνει εκπαίδευση στο παρελθόν και πρόβλεψη σε μεταγενέστερες συναλλαγές.",
-      "how": "Τα 743 διακριτά steps ταξινομούνται χρονικά. Τα πρώτα 594 μπαίνουν στο development και τα τελευταία 149 στο holdout, κρατώντας ολόκληρο κάθε step στη μία πλευρά.",
+      "how": "Τα 743 διακριτά steps ταξινομούνται χρονικά. Τα πρώτα 594 μπαίνουν στο training και τα τελευταία 149 στο test dataset, κρατώντας ολόκληρο κάθε step στη μία πλευρά.",
       "avoids": "Αποφεύγουμε να εκπαιδευτεί το μοντέλο σε συναλλαγές που χρονικά ανήκουν μετά από συναλλαγές αξιολόγησης.",
       "takeaway": "Το 80/20 αφορά τα χρονικά steps και όχι το 80/20 των γραμμών, γι’ αυτό τα δύο partitions έχουν πολύ διαφορετικό πλήθος rows.",
       "input": "Prepared full dataset",
-      "output": "Development + locked temporal holdout",
+      "output": "Training + locked test dataset",
       "source_files": [
-        "src/agenticai_thesis/data/temporal_split.py"
+        "src/agenticai_thesis/data/dataset_split.py"
       ]
     },
     {
       "id": "sample",
       "order": 5,
-      "title": "Reproducible development sample",
+      "title": "Reproducible training sample",
       "short": "Όλα τα 6.559 fraud και 65.590 τυχαία normal, με seed 42.",
       "why": "Κάνει εφικτές τις επαναλαμβανόμενες εκπαιδεύσεις και διατηρεί όλα τα fraud cases.",
-      "how": "Κρατάμε όλα τα fraud του development και επιλέγουμε τυχαία δέκα normal ανά fraud με σταθερό seed 42. Μετά ανακατεύουμε αναπαραγώγιμα τις γραμμές.",
+      "how": "Κρατάμε όλα τα fraud του training και επιλέγουμε τυχαία δέκα normal ανά fraud με σταθερό seed 42. Μετά ανακατεύουμε αναπαραγώγιμα τις γραμμές.",
       "avoids": "Αποφεύγουμε τεράστιο υπολογιστικό κόστος και validation folds με ελάχιστα fraud, χωρίς να πετάμε κανένα διαθέσιμο fraud case.",
       "takeaway": "Το sample είναι ερευνητικό training/validation set με τεχνητή prevalence· δεν αναπαριστά τη φυσική συχνότητα απάτης.",
-      "input": "6.239.040 development rows",
+      "input": "6.239.040 training rows",
       "output": "72.149 rows με αναλογία normal:fraud 10:1",
       "source_files": [
         "src/agenticai_thesis/modeling/benchmark.py"
@@ -569,10 +569,10 @@
       "title": "5% MCAR degradation",
       "short": "3.607 τυχαίες τιμές της type γίνονται missing σε deep copy.",
       "why": "Δημιουργεί ελεγχόμενο και αναπαραγώγιμο πρόβλημα ποιότητας δεδομένων.",
-      "how": "Σε deep copy του sample επιλέγονται τυχαία 3.607 row positions και μόνο η type γίνεται null. Το αρχικό sample και το temporal holdout δεν αλλάζουν.",
+      "how": "Σε deep copy του sample επιλέγονται τυχαία 3.607 row positions και μόνο η type γίνεται null. Το αρχικό sample και το test dataset δεν αλλάζουν.",
       "avoids": "Αποφεύγουμε άγνωστη ή μη επαναλήψιμη βλάβη και εξασφαλίζουμε ότι τα δύο pipelines αντιμετωπίζουν ακριβώς τα ίδια missing cells.",
       "takeaway": "MCAR σημαίνει ότι η πιθανότητα να γίνει μια τιμή missing δεν εξαρτάται από type, fraud label ή άλλα χαρακτηριστικά.",
-      "input": "Clean development sample",
+      "input": "Clean training sample",
       "output": "Shared degraded sample",
       "source_files": [
         "src/agenticai_thesis/quality/degradation.py"
@@ -631,11 +631,11 @@
       "order": 10,
       "title": "Freeze selected plan",
       "short": "Το plan-1 γίνεται ACCEPT στην πρώτη iteration και κλειδώνει.",
-      "why": "Απαγορεύει αλλαγές μετά την αποκάλυψη του final holdout.",
-      "how": "Με βάση μόνο development quality και CV evidence το feedback επιστρέφει ACCEPT. Καταγράφεται το plan-1 και η στρατηγική του δεν επιτρέπεται να αλλάξει στο temporal test.",
+      "why": "Απαγορεύει αλλαγές μετά την αποκάλυψη του final test dataset.",
+      "how": "Με βάση μόνο training quality και CV evidence το feedback επιστρέφει ACCEPT. Καταγράφεται το plan-1 και η στρατηγική του δεν επιτρέπεται να αλλάξει στο test dataset.",
       "avoids": "Αποφεύγουμε test leakage και εκ των υστέρων επιλογή plan επειδή έτυχε να αποδώσει καλύτερα στις τελικές συναλλαγές.",
       "takeaway": "Παγώνει η μέθοδος most_frequent + one-hot, όχι οι learned τιμές· imputer, encoder και classifier κάνουν νέο fit μόνο στα training δεδομένα.",
-      "input": "Development evidence and feedback guardrails",
+      "input": "Training evidence and feedback guardrails",
       "output": "Frozen validated plan",
       "source_files": [
         "experiments/run_agentic.py",
@@ -643,15 +643,15 @@
       ]
     },
     {
-      "id": "holdout",
+      "id": "test_dataset",
       "order": 11,
-      "title": "Final temporal evaluation",
+      "title": "Final test evaluation",
       "short": "Μία αξιολόγηση σε 123.580 καθαρές, μεταγενέστερες συναλλαγές.",
       "why": "Εξετάζει out-of-time γενίκευση σε φυσική class prevalence.",
-      "how": "Κάθε frozen pipeline κάνει fit στο ίδιο degraded sample και predict_proba στις ίδιες 123.580 μεταγενέστερες, καθαρές γραμμές. Το holdout χρησιμοποιείται μόνο για transform/predict.",
+      "how": "Κάθε frozen pipeline κάνει fit στο ίδιο degraded sample και predict_proba στις ίδιες 123.580 μεταγενέστερες, καθαρές γραμμές. Το test dataset χρησιμοποιείται μόνο για transform/predict.",
       "avoids": "Αποφεύγουμε αισιόδοξη τελική εκτίμηση από το enriched 10:1 sample και οποιαδήποτε προσαρμογή στις τελικές απαντήσεις.",
-      "takeaway": "Το holdout είναι μεγαλύτερο από το training sample χωρίς να υπάρχει πρόβλημα· η ισότητα που απαιτείται είναι ίδιο train/test για τα δύο pipelines, όχι ίδιο πλήθος train και test rows.",
-      "input": "Models fitted on degraded sample + untouched holdout",
+      "takeaway": "Το test dataset είναι μεγαλύτερο από το training sample χωρίς να υπάρχει πρόβλημα· η ισότητα που απαιτείται είναι ίδιο train/test για τα δύο pipelines, όχι ίδιο πλήθος train και test rows.",
+      "input": "Models fitted on degraded sample + untouched test dataset",
       "output": "Final metrics, predictions and confusion matrices",
       "source_files": [
         "src/agenticai_thesis/agentic/benchmarking.py"
@@ -681,14 +681,14 @@
       "normal": 6354407,
       "steps": 743
     },
-    "development": {
+    "training": {
       "rows": 6239040,
       "fraud": 6559,
       "normal": 6232481,
       "step_start": 1,
       "step_end": 594
     },
-    "temporal_holdout": {
+    "test_dataset": {
       "rows": 123580,
       "fraud": 1654,
       "normal": 121926,
@@ -710,7 +710,7 @@
         "value": 0.001290820448180152
       },
       {
-        "dataset": "Development",
+        "dataset": "Training",
         "value": 0.0010512835307996103
       },
       {
@@ -718,7 +718,7 @@
         "value": 0.09090909090909091
       },
       {
-        "dataset": "Temporal holdout",
+        "dataset": "Test dataset",
         "value": 0.01338404272536009
       }
     ]
@@ -730,7 +730,7 @@
       "rate": 0.05,
       "affected_rows": 3607,
       "seed": 42,
-      "scope": "development sample deep copy only"
+      "scope": "training sample deep copy only"
     },
     "before_score": 0.9980618811995546,
     "after_score": 0.9997227958807469,
@@ -8572,15 +8572,15 @@
         ]
       }
     ],
-    "curve_note": "Οι development καμπύλες είναι pooled out-of-fold predictions από 5 repetitions. Οι aggregate πίνακες αναφέρουν mean ± std των 25 folds."
+    "curve_note": "Οι training καμπύλες είναι pooled out-of-fold predictions από 5 repetitions. Οι aggregate πίνακες αναφέρουν mean ± std των 25 folds."
   },
-  "temporal_evaluation": {
+  "test_evaluation": {
     "metrics": [
       {
         "pipeline": "conventional",
         "model": "logistic_regression",
         "train_rows": 72149,
-        "temporal_test_rows": 123580,
+        "test_dataset_rows": 123580,
         "accuracy": 0.5998138857420294,
         "recall": 0.9963724304715841,
         "specificity": 0.5944343290192412,
@@ -8600,7 +8600,7 @@
         "pipeline": "agentic",
         "model": "logistic_regression",
         "train_rows": 72149,
-        "temporal_test_rows": 123580,
+        "test_dataset_rows": 123580,
         "accuracy": 0.6012866159572746,
         "recall": 0.9915356711003628,
         "specificity": 0.5959926512802848,
@@ -8620,7 +8620,7 @@
         "pipeline": "conventional",
         "model": "decision_tree",
         "train_rows": 72149,
-        "temporal_test_rows": 123580,
+        "test_dataset_rows": 123580,
         "accuracy": 0.8733937530344716,
         "recall": 0.7726723095525998,
         "specificity": 0.8747601003887604,
@@ -8640,7 +8640,7 @@
         "pipeline": "agentic",
         "model": "decision_tree",
         "train_rows": 72149,
-        "temporal_test_rows": 123580,
+        "test_dataset_rows": 123580,
         "accuracy": 0.85610131089173,
         "recall": 0.7787182587666264,
         "specificity": 0.8571510588389679,
@@ -8660,7 +8660,7 @@
         "pipeline": "conventional",
         "model": "random_forest",
         "train_rows": 72149,
-        "temporal_test_rows": 123580,
+        "test_dataset_rows": 123580,
         "accuracy": 0.871200841560123,
         "recall": 0.8361547762998791,
         "specificity": 0.8716762626511162,
@@ -8680,7 +8680,7 @@
         "pipeline": "agentic",
         "model": "random_forest",
         "train_rows": 72149,
-        "temporal_test_rows": 123580,
+        "test_dataset_rows": 123580,
         "accuracy": 0.8566272859686034,
         "recall": 0.8542926239419589,
         "specificity": 0.8566589570723225,
@@ -15975,7 +15975,7 @@
         "tp": 1413
       }
     ],
-    "interpretation": "Και τα δύο pipelines εκπαιδεύονται στο ίδιο degraded 10:1 sample και αξιολογούνται στο ίδιο καθαρό temporal holdout. Το holdout δεν συμμετέχει στα paired statistical tests."
+    "interpretation": "Και τα δύο pipelines εκπαιδεύονται στο ίδιο degraded 10:1 sample και αξιολογούνται στο ίδιο καθαρό test dataset. Το test dataset δεν συμμετέχει στα paired statistical tests."
   },
   "resources": {
     "elapsed_seconds": 609.2910807000007,
@@ -16020,7 +16020,7 @@
   "selected_plan": {
     "plan": {
       "plan_id": "plan-1",
-      "dataset_id": "paysim-degraded-development-v1",
+      "dataset_id": "paysim-degraded-training-v1",
       "iteration": 1,
       "objective": "improve fraud detection performance",
       "actions": [
@@ -16055,7 +16055,7 @@
       "issues": [],
       "plan": {
         "plan_id": "plan-1",
-        "dataset_id": "paysim-degraded-development-v1",
+        "dataset_id": "paysim-degraded-training-v1",
         "iteration": 1,
         "objective": "improve fraud detection performance",
         "actions": [
@@ -16103,10 +16103,10 @@
   },
   "caveats": [
     "Το επίσημο πείραμα καλύπτει μόνο 5% MCAR missingness στη στήλη type.",
-    "Το development sample έχει τεχνητή αναλογία 10:1 και οι μετρικές του δεν συγκρίνονται αριθμητικά με τις temporal μετρικές φυσικής prevalence.",
-    "Το temporal holdout παραμένει καθαρό: εξετάζεται training σε degraded ιστορικά δεδομένα και inference σε καθαρά μελλοντικά δεδομένα.",
+    "Το training sample έχει τεχνητή αναλογία 10:1 και οι μετρικές του δεν συγκρίνονται αριθμητικά με τις test μετρικές φυσικής prevalence.",
+    "Το test dataset παραμένει καθαρό: εξετάζεται training σε degraded ιστορικά δεδομένα και inference σε καθαρά μελλοντικά δεδομένα.",
     "Τα 25 repeated folds είναι συζευγμένες επαναδειγματοληψίες του ίδιου sample, όχι 25 ανεξάρτητα datasets.",
-    "Μία temporal περίοδος δίνει μία out-of-time εκτίμηση και όχι confidence interval από πολλαπλά χρονικά windows.",
+    "Μία test περίοδος δίνει μία out-of-time εκτίμηση και όχι confidence interval από πολλαπλά χρονικά windows.",
     "Στο τελικό plan η Logistic Regression δεν έχει το StandardScaler του conventional pipeline, άρα η διαφορά της δεν αποδίδεται μόνο στην imputation.",
     "Στατιστική σημαντικότητα δεν συνεπάγεται μεγάλη ή επιχειρησιακά σημαντική βελτίωση."
   ]

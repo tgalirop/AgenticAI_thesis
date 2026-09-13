@@ -31,7 +31,7 @@ def _write_profile_fixture(path: Path) -> Path:
 
 
 def test_profile_reports_dimensions_missingness_duplicates_and_classes(tmp_path: Path) -> None:
-    dataset = _write_profile_fixture(tmp_path / "development.parquet")
+    dataset = _write_profile_fixture(tmp_path / "training.parquet")
     report = profile_dataset(dataset)
 
     assert report["dimensions"] == {"rows": 4, "columns": 10}
@@ -49,7 +49,7 @@ def test_profile_reports_dimensions_missingness_duplicates_and_classes(tmp_path:
 
 
 def test_profile_reports_named_domain_validation_failures(tmp_path: Path) -> None:
-    dataset = _write_profile_fixture(tmp_path / "development.parquet")
+    dataset = _write_profile_fixture(tmp_path / "training.parquet")
     report = profile_dataset(dataset)
     checks = report["invalid_values"]["checks"]
 
@@ -68,7 +68,7 @@ def test_profile_reports_named_domain_validation_failures(tmp_path: Path) -> Non
 
 
 def test_generated_report_is_strict_json_and_matches_returned_schema(tmp_path: Path) -> None:
-    dataset = _write_profile_fixture(tmp_path / "development.parquet")
+    dataset = _write_profile_fixture(tmp_path / "training.parquet")
     output = tmp_path / "reports" / "profile.json"
 
     returned_path = generate_profile(dataset, output)
@@ -76,5 +76,5 @@ def test_generated_report_is_strict_json_and_matches_returned_schema(tmp_path: P
 
     assert returned_path == output
     assert loaded["report_version"] == "1.0"
-    assert loaded["dataset"]["name"] == "development.parquet"
+    assert loaded["dataset"]["name"] == "training.parquet"
     assert loaded["resource_usage"]["execution_time_seconds"] >= 0
