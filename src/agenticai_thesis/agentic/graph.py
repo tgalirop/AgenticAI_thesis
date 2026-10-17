@@ -112,11 +112,83 @@ class PrepareIterationNode:
         return {}
 
 
+class IterationHistorySummarizer:
+    """Turn audit records into compact, JSON-safe evidence for the next prompt."""
+
+    def summarize(
+        self,
+        history: tuple[IterationRecord, ...],
+        baseline: CandidateAssessment,
+    ) -> tuple[dict[str, Any], ...]:
+        return tuple(self._summarize_record(record, baseline) for record in history)
+
+    def _summarize_record(
+        self, record: IterationRecord, baseline: CandidateAssessment
+    ) -> dict[str, Any]:
+        feedback = record.feedback
+        return {
+            "iteration": record.iteration,
+            "plan_id": record.plan.plan_id,
+            "actions": [
+                {
+                    "transformation": action.transformation,
+                    "columns": list(action.columns),
+                    "parameters": dict(action.parameters),
+                    "model_scope": action.model_scope,
+                }
+                for action in record.plan.actions
+            ],
+            "validation_issues": [
+                {"code": issue.code, "message": issue.message, "action_id": issue.action_id}
+                for issue in record.validation.issues
+            ],
+            "execution_status": record.assessment.execution_status,
+            "execution_errors": list(record.errors),
+            "decision": feedback.action.value,
+            "reason_code": feedback.reason_code,
+            "mean_primary_metric_delta": self._rounded(feedback.primary_metric_delta),
+            "quality_delta": self._rounded(feedback.quality_delta),
+            "runtime_multiplier": self._rounded(feedback.runtime_multiplier),
+            "model_deltas_vs_baseline": self._model_deltas(record.assessment, baseline),
+            "recommendations": list(feedback.recommendations),
+        }
+
+    def _model_deltas(
+        self, candidate: CandidateAssessment, baseline: CandidateAssessment
+    ) -> dict[str, dict[str, float | None]]:
+        reference = {outcome.model_name: outcome for outcome in baseline.model_outcomes}
+        deltas: dict[str, dict[str, float | None]] = {}
+        for outcome in candidate.successful_outcomes:
+            base = reference.get(outcome.model_name)
+            if base is None or base.status != "success":
+                continue
+            deltas[outcome.model_name] = {
+                metric: self._delta(getattr(outcome, metric), getattr(base, metric))
+                for metric in ("primary_metric", "recall", "precision")
+            }
+        return deltas
+
+    @classmethod
+    def _delta(cls, value: float | None, reference: float | None) -> float | None:
+        if value is None or reference is None:
+            return None
+        return cls._rounded(value - reference)
+
+    @staticmethod
+    def _rounded(value: float | None) -> float | None:
+        return None if value is None else round(value, 6)
+
+
 class GenerateStrategyNode:
     """Build compact evidence and request one typed transformation plan."""
 
-    def __init__(self, generator: StrategyGenerator) -> None:
+    def __init__(
+        self,
+        generator: StrategyGenerator,
+        summarizer: IterationHistorySummarizer | None = None,
+    ) -> None:
         self._generator = generator
+        self._summarizer = summarizer or IterationHistorySummarizer()
 
     def __call__(self, graph_state: AgentGraphState) -> dict[str, Any]:
         state = graph_state["agent_state"]
@@ -131,6 +203,7 @@ class GenerateStrategyNode:
             quality_metrics=graph_state["quality_metrics"],
             baseline_metrics=graph_state["baseline_metrics"],
             previous_feedback=feedback_messages,
+            previous_iterations=self._summarizer.summarize(state.history, state.baseline),
         )
         return {"current_plan": self._generator.generate(prompt_context)}
 

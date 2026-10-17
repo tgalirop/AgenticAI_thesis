@@ -6,13 +6,26 @@ from collections.abc import Sequence
 
 import numpy as np
 import pandas as pd
+from scipy.stats import t as student_t
 from scipy.stats import wilcoxon
 
 
 class PairedPipelineComparator:
-    """Compare pipelines on identical repeat/fold observations."""
+    """Compare pipelines on identical repeat/fold observations.
+
+    Two tests are reported side by side. The Wilcoxon signed-rank test treats the
+    fold differences as independent. Repeated k-fold training sets overlap
+    heavily, so the Nadeau–Bengio corrected resampled t-test is also reported: it
+    inflates the variance by ``n_validation / n_train`` to account for that overlap
+    and is the more conservative of the two.
+    """
 
     _KEYS = ["model", "repeat", "fold"]
+
+    def __init__(self, *, test_train_ratio: float | None = None) -> None:
+        if test_train_ratio is not None and test_train_ratio <= 0.0:
+            raise ValueError("test_train_ratio must be positive")
+        self._test_train_ratio = test_train_ratio
 
     def compare(
         self,
@@ -33,6 +46,7 @@ class PairedPipelineComparator:
         )
         if len(merged) != len(conventional) or len(merged) != len(agentic):
             raise ValueError("Pipelines do not contain exactly the same model/fold pairs")
+        test_train_ratio = self._resolve_test_train_ratio(conventional)
 
         records: list[dict[str, object]] = []
         for model_name, group in merged.groupby("model", sort=False):
@@ -45,6 +59,7 @@ class PairedPipelineComparator:
                 else:
                     result = wilcoxon(candidate, reference, alternative="two-sided")
                     statistic, p_value = float(result.statistic), float(result.pvalue)
+                nb_statistic, nb_p_value = self._nadeau_bengio(delta, test_train_ratio)
                 records.append(
                     {
                         "model": model_name,
@@ -58,12 +73,42 @@ class PairedPipelineComparator:
                         "ties": int(np.isclose(delta, 0.0).sum()),
                         "wilcoxon_statistic": statistic,
                         "p_value": p_value,
+                        "nb_t_statistic": nb_statistic,
+                        "nb_p_value": nb_p_value,
                     }
                 )
         output = pd.DataFrame.from_records(records)
         output["p_value_holm"] = self._holm(output["p_value"].to_numpy(dtype=float))
         output["significant_0_05"] = output["p_value_holm"] < 0.05
+        output["nb_p_value_holm"] = self._holm(output["nb_p_value"].to_numpy(dtype=float))
+        output["nb_significant_0_05"] = output["nb_p_value_holm"] < 0.05
         return output
+
+    def _resolve_test_train_ratio(self, folds: pd.DataFrame) -> float:
+        """Use the explicit ratio, otherwise derive it from recorded fold sizes."""
+
+        if self._test_train_ratio is not None:
+            return self._test_train_ratio
+        if {"train_rows", "validation_rows"}.issubset(folds.columns):
+            return float((folds["validation_rows"] / folds["train_rows"]).mean())
+        raise ValueError(
+            "Nadeau-Bengio correction needs train_rows/validation_rows columns "
+            "or an explicit test_train_ratio"
+        )
+
+    @staticmethod
+    def _nadeau_bengio(delta: np.ndarray, test_train_ratio: float) -> tuple[float, float]:
+        """Return the corrected resampled t statistic and two-sided p-value."""
+
+        observations = len(delta)
+        mean = float(delta.mean())
+        variance = float(delta.var(ddof=1))
+        if np.isclose(variance, 0.0):
+            # Identical differences in every fold: no variability to test against.
+            return (0.0, 1.0) if np.isclose(mean, 0.0) else (float(np.sign(mean) * np.inf), 0.0)
+        statistic = mean / np.sqrt((1.0 / observations + test_train_ratio) * variance)
+        p_value = 2.0 * float(student_t.sf(abs(statistic), df=observations - 1))
+        return float(statistic), p_value
 
     @classmethod
     def _validate(cls, frame: pd.DataFrame, metrics: Sequence[str], label: str) -> None:

@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
 
 from agenticai_thesis.agentic.domain import (
     ColumnKind,
@@ -14,7 +15,11 @@ from agenticai_thesis.agentic.domain import (
     ValidationIssue,
     ValidationResult,
 )
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+
 from agenticai_thesis.agentic.execution import (
+    BaselinePreprocessingContract,
     ModelPipelineBuilder,
     SafeLog1pTransformer,
     TransformationFactoryRegistry,
@@ -22,6 +27,12 @@ from agenticai_thesis.agentic.execution import (
 from agenticai_thesis.agentic.executor import TransformationExecutor
 from agenticai_thesis.agentic.transformations import TransformationRegistry
 from agenticai_thesis.agentic.validator import TransformationPlanValidator
+from agenticai_thesis.modeling.preprocessing import (
+    CATEGORICAL_FEATURES,
+    MODEL_FEATURES,
+    NUMERIC_FEATURES,
+    build_preprocessor,
+)
 
 
 def _context(role: DatasetRole = DatasetRole.TRAINING) -> DatasetContext:
@@ -211,6 +222,172 @@ def test_safe_log_transform_rejects_negative_input() -> None:
     transformer = SafeLog1pTransformer()
     with pytest.raises(ValueError, match="non-negative"):
         transformer.fit(np.asarray([[1.0], [-0.1]]))
+
+
+def _baseline_contract() -> BaselinePreprocessingContract:
+    return BaselinePreprocessingContract(
+        categorical_columns=tuple(CATEGORICAL_FEATURES),
+        numeric_columns=tuple(NUMERIC_FEATURES),
+        scaled_models=frozenset({"logistic_regression"}),
+    )
+
+
+def _model_feature_context() -> DatasetContext:
+    column_types = {feature: ColumnKind.NUMERIC for feature in NUMERIC_FEATURES}
+    column_types.update({"type": ColumnKind.CATEGORICAL, "isFraud": ColumnKind.TARGET})
+    return DatasetContext(
+        dataset_id="training-v1",
+        role=DatasetRole.TRAINING,
+        column_types=column_types,
+        target_column="isFraud",
+        protected_columns=frozenset({"isFraud"}),
+    )
+
+
+def _type_imputation_plan() -> TransformationPlan:
+    """The shape of the official plan-1: impute and encode ``type`` only."""
+
+    return TransformationPlan(
+        plan_id="plan-1",
+        dataset_id="training-v1",
+        iteration=1,
+        objective="Restore missing transaction types.",
+        actions=(
+            TransformationAction(
+                action_id="impute_type",
+                transformation="impute_categorical",
+                columns=("type",),
+                parameters={"strategy": "most_frequent"},
+                rationale="Replace missing transaction types.",
+            ),
+            TransformationAction(
+                action_id="one_hot_type",
+                transformation="one_hot_encode",
+                columns=("type",),
+                parameters={"handle_unknown": "ignore"},
+                rationale="Encode transaction types.",
+            ),
+        ),
+    )
+
+
+def _model_feature_data(rows: int = 240) -> tuple[pd.DataFrame, np.ndarray]:
+    rng = np.random.default_rng(7)
+    step = rng.integers(1, 500, size=rows)
+    amount = rng.lognormal(mean=9.0, sigma=2.0, size=rows)
+    x = pd.DataFrame(
+        {
+            "type": rng.choice(["PAYMENT", "TRANSFER", "CASH_OUT", "CASH_IN"], size=rows),
+            "step": step,
+            "amount": amount,
+            "hour": (step - 1) % 24,
+            "day": (step - 1) // 24,
+            "log_amount": np.log1p(amount),
+            "is_merchant_destination": rng.integers(0, 2, size=rows),
+        }
+    )[MODEL_FEATURES]
+    y = (rng.random(rows) < 0.2).astype(int)
+    return x, y
+
+
+def test_baseline_contract_keeps_logistic_scaling_for_untouched_columns() -> None:
+    context = _model_feature_context()
+    executor = TransformationExecutor(
+        ModelPipelineBuilder(TransformationFactoryRegistry.default(), baseline=_baseline_contract())
+    )
+    result = executor.execute(
+        _validated(_type_imputation_plan(), context),
+        context,
+        model_name="logistic_regression",
+        estimator=LogisticRegression(max_iter=1000),
+    )
+    transformers = result.pipeline.named_steps["preprocessing"].transformers
+    scaled = {
+        columns[0]
+        for _name, steps, columns in transformers
+        if any(isinstance(step, StandardScaler) for _step_name, step in steps.steps)
+    }
+
+    assert scaled == set(NUMERIC_FEATURES)
+    # Applied actions remain the audited plan actions, not the implicit baseline.
+    assert [action.action_id for action in result.applied_actions] == ["impute_type", "one_hot_type"]
+
+
+def test_baseline_contract_does_not_scale_tree_models() -> None:
+    context = _model_feature_context()
+    executor = TransformationExecutor(
+        ModelPipelineBuilder(TransformationFactoryRegistry.default(), baseline=_baseline_contract())
+    )
+    result = executor.execute(
+        _validated(_type_imputation_plan(), context),
+        context,
+        model_name="decision_tree",
+        estimator=DecisionTreeClassifier(random_state=42),
+    )
+    transformed_columns = [
+        columns[0] for _name, _steps, columns in result.pipeline.named_steps["preprocessing"].transformers
+    ]
+    assert transformed_columns == ["type"]
+
+
+def test_plan_without_encoding_still_receives_baseline_one_hot_encoding() -> None:
+    plan = TransformationPlan(
+        plan_id="plan-impute-only",
+        dataset_id="training-v1",
+        iteration=1,
+        objective="Impute only.",
+        actions=(_type_imputation_plan().actions[0],),
+    )
+    context = _model_feature_context()
+    executor = TransformationExecutor(
+        ModelPipelineBuilder(TransformationFactoryRegistry.default(), baseline=_baseline_contract())
+    )
+    result = executor.execute(
+        _validated(plan, context),
+        context,
+        model_name="decision_tree",
+        estimator=DecisionTreeClassifier(random_state=42),
+    )
+    x, y = _model_feature_data()
+    result.pipeline.fit(x, y)
+
+    type_steps = result.pipeline.named_steps["preprocessing"].transformers[0][1].steps
+    assert [name for name, _step in type_steps] == [
+        "step_0_impute_categorical",
+        "baseline_step_0_one_hot_encode",
+    ]
+
+
+def test_type_imputation_plan_matches_conventional_pipeline_on_clean_data() -> None:
+    """With nothing missing, plan-1 must reproduce the conventional predictions.
+
+    Any remaining conventional-versus-Agentic difference is then attributable to
+    the plan's handling of missing values, not to a changed pipeline contract.
+    """
+
+    context = _model_feature_context()
+    executor = TransformationExecutor(
+        ModelPipelineBuilder(TransformationFactoryRegistry.default(), baseline=_baseline_contract())
+    )
+    x, y = _model_feature_data()
+    agentic = executor.execute(
+        _validated(_type_imputation_plan(), context),
+        context,
+        model_name="logistic_regression",
+        estimator=LogisticRegression(max_iter=1000),
+    ).pipeline
+    conventional = Pipeline(
+        [
+            ("preprocessing", build_preprocessor(scale_numeric=True)),
+            ("classifier", LogisticRegression(max_iter=1000)),
+        ]
+    )
+    agentic.fit(x, y)
+    conventional.fit(x, y)
+
+    np.testing.assert_allclose(
+        agentic.predict_proba(x)[:, 1], conventional.predict_proba(x)[:, 1], atol=1e-8
+    )
 
 
 def test_builder_fails_closed_when_factory_is_missing() -> None:

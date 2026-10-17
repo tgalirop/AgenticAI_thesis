@@ -195,6 +195,34 @@ def test_invalid_plan_is_not_executed_and_retry_can_succeed(tmp_path: Path) -> N
     assert evaluator.plan_ids == ["plan_002"]
     assert len(model.calls) == 2
 
+    # The retry prompt must carry the rejected plan and its concrete issues, not
+    # only a generic recommendation.
+    first_prompt = model.calls[0]["user_prompt"]
+    retry_prompt = model.calls[1]["user_prompt"]
+    assert "transformation_not_allowed" not in first_prompt
+    assert "invalid_001" in retry_prompt
+    assert "execute_python" in retry_prompt
+    assert "transformation_not_allowed" in retry_prompt
+
+
+def test_retry_prompt_reports_per_model_deltas_against_baseline(tmp_path: Path) -> None:
+    # 0.701 is below the minimum primary improvement, so the first plan is retried.
+    evaluator = QueuedCandidateEvaluator([0.701, 0.72])
+    responses = [_plan("plan_001", 1), _plan("plan_002", 2)]
+    workflow, model, _store = _workflow(tmp_path, responses, evaluator)
+
+    workflow.run(
+        agent_state=_initial_state(),  # type: ignore[arg-type]
+        dataset_context=_context(),
+        quality_metrics={"data_quality_score": 0.90},
+        baseline_metrics={"pr_auc": 0.70},
+    )
+
+    retry_prompt = model.calls[1]["user_prompt"]
+    assert '"reason_code": "insufficient_improvement"' in retry_prompt
+    assert '"primary_metric": 0.001' in retry_prompt
+    assert '"decision": "RETRY"' in retry_prompt
+
 
 def test_test_dataset_is_rejected_before_calling_model(tmp_path: Path) -> None:
     evaluator = QueuedCandidateEvaluator([0.72])

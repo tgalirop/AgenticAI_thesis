@@ -61,6 +61,10 @@ class StrategyPromptContext:
     quality_metrics: Mapping[str, Any]
     baseline_metrics: Mapping[str, Any]
     previous_feedback: Sequence[str] = ()
+    # Compact audit of earlier iterations: the plan, validation issues, decision
+    # and per-model deltas. Without it a retry sees the same evidence as the first
+    # attempt and has no basis for proposing a corrected plan.
+    previous_iterations: Sequence[Mapping[str, Any]] = ()
 
     def __post_init__(self) -> None:
         if self.iteration < 1:
@@ -78,7 +82,9 @@ Never request access to the held-out test dataset.
 Prefer the smallest defensible plan and explain every action in its rationale.
 Select an action only when a supplied quality metric or baseline-pipeline contract
 directly justifies it. Do not change class-imbalance handling merely because the
-fraud target is imbalanced; assume the baseline estimators already handle it."""
+fraud target is imbalanced; assume the baseline estimators already handle it.
+When previous_iterations are supplied, do not resubmit a plan that was already
+evaluated; correct every reported validation issue and respond to the metric deltas."""
 
     def __init__(
         self,
@@ -106,6 +112,7 @@ fraud target is imbalanced; assume the baseline estimators already handle it."""
             "quality_metrics": dict(context.quality_metrics),
             "baseline_metrics": dict(context.baseline_metrics),
             "previous_feedback": list(context.previous_feedback),
+            "previous_iterations": [dict(item) for item in context.previous_iterations],
             "allowed_transformations": sorted(set(allowed_transformations)),
             "transformation_contracts": {
                 name: self._contracts[name] for name in sorted(set(allowed_transformations))

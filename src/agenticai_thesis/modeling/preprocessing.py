@@ -8,14 +8,16 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
 
 CATEGORICAL_FEATURES = ["type"]
+# ``is_transfer`` and ``is_cash_out`` are deliberately not model features. On
+# clean data they equal the TRANSFER/CASH_OUT one-hot columns of ``type``, so they
+# add no information. Under controlled ``type`` missingness they would leak the
+# masked value back to the model and make the degradation almost information-free.
 NUMERIC_FEATURES = [
     "step",
     "amount",
     "hour",
     "day",
     "log_amount",
-    "is_transfer",
-    "is_cash_out",
     "is_merchant_destination",
 ]
 MODEL_FEATURES = CATEGORICAL_FEATURES + NUMERIC_FEATURES

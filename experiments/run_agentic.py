@@ -18,7 +18,11 @@ from agenticai_thesis.agentic.candidate_evaluation import AgentCandidateEvaluato
 from agenticai_thesis.agentic.checkpointing import JsonCheckpointStore
 from agenticai_thesis.agentic.domain import ColumnKind, DatasetContext, DatasetRole
 from agenticai_thesis.agentic.evaluators import EvaluationConfig, MachineLearningEvaluator
-from agenticai_thesis.agentic.execution import ModelPipelineBuilder, TransformationFactoryRegistry
+from agenticai_thesis.agentic.execution import (
+    BaselinePreprocessingContract,
+    ModelPipelineBuilder,
+    TransformationFactoryRegistry,
+)
 from agenticai_thesis.agentic.executor import TransformationExecutor
 from agenticai_thesis.agentic.feedback import (
     CandidateAssessment,
@@ -36,8 +40,12 @@ from agenticai_thesis.agentic.validator import TransformationPlanValidator
 from agenticai_thesis.config import PROJECT_ROOT, load_agent_config, load_data_config, load_yaml
 from agenticai_thesis.modeling.benchmark import benchmark_models, load_reproducible_sample, summarize_fold_metrics
 from agenticai_thesis.modeling.cross_validation import CrossValidationFoldProvider
-from agenticai_thesis.modeling.models import create_estimator
-from agenticai_thesis.modeling.preprocessing import CATEGORICAL_FEATURES, MODEL_FEATURES
+from agenticai_thesis.modeling.models import create_estimator, model_requires_scaling
+from agenticai_thesis.modeling.preprocessing import (
+    CATEGORICAL_FEATURES,
+    MODEL_FEATURES,
+    NUMERIC_FEATURES,
+)
 from agenticai_thesis.modeling.statistical_tests import PairedPipelineComparator
 from agenticai_thesis.quality.degradation import ControlledDataDegrader, ControlledDegradationConfig
 from agenticai_thesis.quality.plan_quality import TransformationAwarePlanQualityEvaluator
@@ -103,7 +111,12 @@ class AgenticExperimentRunner:
             random_seed=int(self._baseline["cross_validation"]["random_seed"]),
         ).create(y)
         estimators = self._estimators()
-        executor = TransformationExecutor(ModelPipelineBuilder(TransformationFactoryRegistry.default()))
+        executor = TransformationExecutor(
+            ModelPipelineBuilder(
+                TransformationFactoryRegistry.default(),
+                baseline=self._baseline_contract(),
+            )
+        )
         ml_evaluator = MachineLearningEvaluator(
             EvaluationConfig(
                 primary_metric=self._baseline["primary_metric"],
@@ -277,7 +290,8 @@ class AgenticExperimentRunner:
             for feature in MODEL_FEATURES
         }
         for feature in ("is_transfer", "is_cash_out", "is_merchant_destination"):
-            types[feature] = ColumnKind.BINARY
+            if feature in types:
+                types[feature] = ColumnKind.BINARY
         types[self._data.target_column] = ColumnKind.TARGET
         return DatasetContext(
             dataset_id="paysim-degraded-training-v1",
@@ -285,6 +299,15 @@ class AgenticExperimentRunner:
             column_types=types,
             target_column=self._data.target_column,
             protected_columns=frozenset({self._data.target_column}),
+        )
+
+    def _baseline_contract(self) -> BaselinePreprocessingContract:
+        return BaselinePreprocessingContract(
+            categorical_columns=tuple(CATEGORICAL_FEATURES),
+            numeric_columns=tuple(NUMERIC_FEATURES),
+            scaled_models=frozenset(
+                name for name in self._baseline["models"] if model_requires_scaling(name)
+            ),
         )
 
     def _estimators(self) -> dict[str, Any]:
@@ -347,6 +370,10 @@ class AgenticExperimentRunner:
             "logistic_regression": "all numeric features are standardized",
             "tree_models": "numeric features pass through without scaling",
             "class_imbalance": "all baseline estimators already use class weights",
+            "plan_semantics": (
+                "plan actions are applied on top of this baseline; columns and models "
+                "that the plan does not mention keep the baseline preprocessing"
+            ),
         }
         return metrics
 

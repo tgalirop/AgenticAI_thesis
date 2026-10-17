@@ -171,6 +171,54 @@ class SamplingFactory(TransformationFactory):
         return ExecutionArtifact(ExecutionArtifactKind.SAMPLER, samplers[method])
 
 
+@dataclass(frozen=True)
+class BaselinePreprocessingContract:
+    """Conventional preprocessing that an Agent plan modifies instead of replacing.
+
+    The Strategy Generator is told which baseline preprocessing already exists and
+    is asked for the smallest defensible plan, so its plans describe changes to that
+    baseline. For every column, baseline transformations whose kind the plan does
+    not already request are appended after the plan's own steps. Without this, a
+    plan that only imputes ``type`` would silently drop the baseline scaling of
+    Logistic Regression and confound the conventional-versus-Agentic comparison.
+    """
+
+    categorical_columns: tuple[str, ...]
+    numeric_columns: tuple[str, ...]
+    scaled_models: frozenset[str] = frozenset()
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        """Columns in the conventional transformer order."""
+
+        return (*self.categorical_columns, *self.numeric_columns)
+
+    def actions_for(self, model_name: str) -> tuple[TransformationAction, ...]:
+        """Express the conventional pipeline for one model as declarative actions."""
+
+        actions = [
+            TransformationAction(
+                action_id="baseline_one_hot_encode",
+                transformation="one_hot_encode",
+                columns=self.categorical_columns,
+                parameters={"handle_unknown": "ignore"},
+                rationale="Conventional baseline categorical encoding.",
+            )
+        ]
+        if model_name in self.scaled_models:
+            actions.append(
+                TransformationAction(
+                    action_id="baseline_scale_numeric",
+                    transformation="scale_numeric",
+                    columns=self.numeric_columns,
+                    parameters={"method": "standard"},
+                    rationale="Conventional baseline numeric standardisation.",
+                    model_scope=model_name,
+                )
+            )
+        return tuple(actions)
+
+
 class TransformationFactoryRegistry:
     """Immutable-by-convention mapping from safe action names to factories."""
 
@@ -216,8 +264,14 @@ class TransformationFactoryRegistry:
 class ModelPipelineBuilder:
     """Compose model-specific pipelines from trusted execution artifacts."""
 
-    def __init__(self, factory_registry: TransformationFactoryRegistry) -> None:
+    def __init__(
+        self,
+        factory_registry: TransformationFactoryRegistry,
+        *,
+        baseline: BaselinePreprocessingContract | None = None,
+    ) -> None:
         self._factory_registry = factory_registry
+        self._baseline = baseline
 
     @property
     def supported_transformations(self) -> frozenset[str]:
@@ -233,6 +287,7 @@ class ModelPipelineBuilder:
         """Build one pipeline while preserving plan order for every column."""
 
         column_steps: dict[str, list[tuple[str, TransformerMixin]]] = {}
+        column_transformations: dict[str, set[str]] = {}
         sampler: Any | None = None
         estimator_parameters: dict[str, Any] = {}
         applied: list[AppliedAction] = []
@@ -249,6 +304,7 @@ class ModelPipelineBuilder:
                     # shares fitted state between otherwise independent columns.
                     step_name = self._safe_step_name(order, action.transformation)
                     column_steps.setdefault(column, []).append((step_name, clone(artifact.value)))
+                    column_transformations.setdefault(column, set()).add(action.transformation)
             elif artifact.kind == ExecutionArtifactKind.SAMPLER:
                 if sampler is not None:
                     raise ValueError("A model pipeline may contain at most one class sampler")
@@ -267,6 +323,9 @@ class ModelPipelineBuilder:
                 )
             )
 
+        if self._baseline is not None:
+            self._append_baseline_steps(model_name, column_steps, column_transformations)
+
         fitted_estimator = clone(estimator)
         if estimator_parameters:
             available = fitted_estimator.get_params(deep=False)
@@ -281,7 +340,7 @@ class ModelPipelineBuilder:
         if column_steps:
             transformers = [
                 (f"column_{index}", Pipeline(steps), [column])
-                for index, (column, steps) in enumerate(column_steps.items())
+                for index, (column, steps) in enumerate(self._ordered(column_steps).items())
             ]
             pipeline_steps.append(
                 (
@@ -299,6 +358,35 @@ class ModelPipelineBuilder:
             pipeline_steps.append(("sampler", sampler))
         pipeline_steps.append(("classifier", fitted_estimator))
         return ImbalancedPipeline(pipeline_steps), tuple(applied)
+
+    def _append_baseline_steps(
+        self,
+        model_name: str,
+        column_steps: dict[str, list[tuple[str, TransformerMixin]]],
+        column_transformations: dict[str, set[str]],
+    ) -> None:
+        """Keep baseline steps whose kind the plan does not already request."""
+
+        assert self._baseline is not None
+        for action in self._baseline.actions_for(model_name):
+            artifact = self._factory_registry.require(action.transformation).build(action)
+            for column in action.columns:
+                if action.transformation in column_transformations.get(column, set()):
+                    continue
+                step_name = f"baseline_{self._safe_step_name(0, action.transformation)}"
+                column_steps.setdefault(column, []).append((step_name, clone(artifact.value)))
+
+    def _ordered(
+        self, column_steps: dict[str, list[tuple[str, TransformerMixin]]]
+    ) -> dict[str, list[tuple[str, TransformerMixin]]]:
+        """Use the conventional column order so both pipelines see the same layout."""
+
+        if self._baseline is None:
+            return column_steps
+        rank = {column: index for index, column in enumerate(self._baseline.columns)}
+        return dict(
+            sorted(column_steps.items(), key=lambda item: rank.get(item[0], len(rank)))
+        )
 
     @staticmethod
     def _safe_step_name(order: int, transformation: str) -> str:
