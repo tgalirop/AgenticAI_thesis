@@ -1,0 +1,128 @@
+{
+  "iteration": 3,
+  "plan": {
+    "plan_id": "plan-3",
+    "dataset_id": "paysim-degraded-training-v1",
+    "iteration": 3,
+    "objective": "Restore logistic regression precision while maintaining overall performance",
+    "actions": [
+      {
+        "action_id": "impute_type_missing",
+        "transformation": "impute_categorical",
+        "columns": [
+          "type"
+        ],
+        "parameters": {
+          "strategy": "constant",
+          "fill_value": "missing"
+        },
+        "rationale": "Impute missing type values with a constant to preserve them as a separate category, improving logistic regression precision.",
+        "model_scope": "all"
+      },
+      {
+        "action_id": "one_hot_encode_type",
+        "transformation": "one_hot_encode",
+        "columns": [
+          "type"
+        ],
+        "parameters": {
+          "handle_unknown": "ignore"
+        },
+        "rationale": "One-hot encode type after imputation to provide explicit features for each category, including the missing category, enhancing model discrimination.",
+        "model_scope": "all"
+      }
+    ]
+  },
+  "validation": {
+    "is_valid": true,
+    "issues": [],
+    "plan": {
+      "plan_id": "plan-3",
+      "dataset_id": "paysim-degraded-training-v1",
+      "iteration": 3,
+      "objective": "Restore logistic regression precision while maintaining overall performance",
+      "actions": [
+        {
+          "action_id": "impute_type_missing",
+          "transformation": "impute_categorical",
+          "columns": [
+            "type"
+          ],
+          "parameters": {
+            "strategy": "constant",
+            "fill_value": "missing"
+          },
+          "rationale": "Impute missing type values with a constant to preserve them as a separate category, improving logistic regression precision.",
+          "model_scope": "all"
+        },
+        {
+          "action_id": "one_hot_encode_type",
+          "transformation": "one_hot_encode",
+          "columns": [
+            "type"
+          ],
+          "parameters": {
+            "handle_unknown": "ignore"
+          },
+          "rationale": "One-hot encode type after imputation to provide explicit features for each category, including the missing category, enhancing model discrimination.",
+          "model_scope": "all"
+        }
+      ]
+    }
+  },
+  "assessment": {
+    "plan_id": "plan-3",
+    "iteration": 3,
+    "validation_valid": true,
+    "execution_status": "success",
+    "model_outcomes": [
+      {
+        "model_name": "logistic_regression",
+        "status": "success",
+        "primary_metric": 0.5471406806655971,
+        "recall": 0.8737925573477703,
+        "precision": 0.28957025334737824,
+        "fit_seconds": 8.542939800070599,
+        "predict_seconds": 0.8565774000599049
+      },
+      {
+        "model_name": "decision_tree",
+        "status": "success",
+        "primary_metric": 0.6035128088362268,
+        "recall": 0.7384658192405722,
+        "precision": 0.6127591585258108,
+        "fit_seconds": 13.042592599929776,
+        "predict_seconds": 0.5162401997949928
+      },
+      {
+        "model_name": "random_forest",
+        "status": "success",
+        "primary_metric": 0.8306303876708331,
+        "recall": 0.7424608146825176,
+        "precision": 0.7466389199517824,
+        "fit_seconds": 65.8625642998959,
+        "predict_seconds": 2.5736013000132516
+      }
+    ],
+    "data_quality_score": 0.9997117077159767,
+    "preprocessing_seconds": 0.06523480004398152,
+    "memory_rss_start_bytes": 445878272,
+    "peak_memory_bytes": 526663680,
+    "memory_peak_increase_bytes": 80785408
+  },
+  "feedback": {
+    "action": "ACCEPT",
+    "reason_code": "improvement_accepted",
+    "reason": "The candidate provides an acceptable benefit without violating guardrails.",
+    "plan_id": "plan-3",
+    "iteration": 3,
+    "primary_metric_delta": 0.0,
+    "quality_delta": 0.002142589838885045,
+    "runtime_multiplier": 1.0054129476760552,
+    "is_new_best": true,
+    "recommendations": []
+  },
+  "artifacts": [],
+  "warnings": [],
+  "errors": []
+}

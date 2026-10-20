@@ -1,0 +1,112 @@
+{
+  "iteration": 2,
+  "plan": {
+    "plan_id": "plan-2",
+    "dataset_id": "paysim-degraded-training-v1",
+    "iteration": 2,
+    "objective": "Restore Precision for logistic_regression.",
+    "actions": [
+      {
+        "action_id": "scale_numeric_logreg",
+        "transformation": "scale_numeric",
+        "columns": [
+          "amount",
+          "day",
+          "hour",
+          "log_amount",
+          "step"
+        ],
+        "parameters": {
+          "method": "standard"
+        },
+        "rationale": "Logistic regression requires standardized numeric features; the baseline contract specifies numeric features are standardized for logistic regression, but the previous plan omitted scaling, leading to a precision drop. Scaling these numeric columns restores the expected preprocessing and should improve precision.",
+        "model_scope": "logistic_regression"
+      }
+    ]
+  },
+  "validation": {
+    "is_valid": true,
+    "issues": [],
+    "plan": {
+      "plan_id": "plan-2",
+      "dataset_id": "paysim-degraded-training-v1",
+      "iteration": 2,
+      "objective": "Restore Precision for logistic_regression.",
+      "actions": [
+        {
+          "action_id": "scale_numeric_logreg",
+          "transformation": "scale_numeric",
+          "columns": [
+            "amount",
+            "day",
+            "hour",
+            "log_amount",
+            "step"
+          ],
+          "parameters": {
+            "method": "standard"
+          },
+          "rationale": "Logistic regression requires standardized numeric features; the baseline contract specifies numeric features are standardized for logistic regression, but the previous plan omitted scaling, leading to a precision drop. Scaling these numeric columns restores the expected preprocessing and should improve precision.",
+          "model_scope": "logistic_regression"
+        }
+      ]
+    }
+  },
+  "assessment": {
+    "plan_id": "plan-2",
+    "iteration": 2,
+    "validation_valid": true,
+    "execution_status": "success",
+    "model_outcomes": [
+      {
+        "model_name": "logistic_regression",
+        "status": "success",
+        "primary_metric": 0.5471406806655971,
+        "recall": 0.8737925573477703,
+        "precision": 0.28957025334737824,
+        "fit_seconds": 8.545149000186939,
+        "predict_seconds": 0.7596265999600291
+      },
+      {
+        "model_name": "decision_tree",
+        "status": "success",
+        "primary_metric": 0.6035128088362268,
+        "recall": 0.7384658192405722,
+        "precision": 0.6127591585258108,
+        "fit_seconds": 13.671085599751677,
+        "predict_seconds": 0.4470879000145942
+      },
+      {
+        "model_name": "random_forest",
+        "status": "success",
+        "primary_metric": 0.8306303876708331,
+        "recall": 0.7424608146825176,
+        "precision": 0.7466389199517824,
+        "fit_seconds": 69.11983349994989,
+        "predict_seconds": 2.738494800054468
+      }
+    ],
+    "data_quality_score": 0.9975691178770917,
+    "preprocessing_seconds": 0.041023600031621754,
+    "memory_rss_start_bytes": 440389632,
+    "peak_memory_bytes": 528502784,
+    "memory_peak_increase_bytes": 88113152
+  },
+  "feedback": {
+    "action": "RETRY",
+    "reason_code": "insufficient_improvement",
+    "reason": "The candidate does not reach the configured improvement threshold.",
+    "plan_id": "plan-2",
+    "iteration": 2,
+    "primary_metric_delta": 0.0,
+    "quality_delta": 0.0,
+    "runtime_multiplier": 1.0478737937581766,
+    "is_new_best": false,
+    "recommendations": [
+      "Generate a materially different preprocessing strategy."
+    ]
+  },
+  "artifacts": [],
+  "warnings": [],
+  "errors": []
+}

@@ -4,7 +4,7 @@
     "plan_id": "plan-1",
     "dataset_id": "paysim-degraded-training-v1",
     "iteration": 1,
-    "objective": "improve fraud detection performance",
+    "objective": "Handle missing categorical values and reduce skewness of numeric features to improve model performance",
     "actions": [
       {
         "action_id": "impute_type",
@@ -15,19 +15,17 @@
         "parameters": {
           "strategy": "most_frequent"
         },
-        "rationale": "The 'type' column has 3607 missing values; imputing with the most frequent category preserves the overall distribution and prevents loss of information.",
+        "rationale": "The 'type' column has 3607 missing entries; imputing with the most frequent category preserves the overall distribution and avoids introducing bias.",
         "model_scope": "all"
       },
       {
-        "action_id": "one_hot_type",
-        "transformation": "one_hot_encode",
+        "action_id": "log_amount",
+        "transformation": "log_transform",
         "columns": [
-          "type"
+          "amount"
         ],
-        "parameters": {
-          "handle_unknown": "ignore"
-        },
-        "rationale": "The 'type' column is categorical and must be one-hot encoded for linear models; unknown categories are ignored to avoid errors during inference.",
+        "parameters": {},
+        "rationale": "The 'amount' feature is highly skewed; applying a log transform stabilizes variance and improves linear model fit while keeping the feature non-negative.",
         "model_scope": "all"
       }
     ]
@@ -39,7 +37,7 @@
       "plan_id": "plan-1",
       "dataset_id": "paysim-degraded-training-v1",
       "iteration": 1,
-      "objective": "improve fraud detection performance",
+      "objective": "Handle missing categorical values and reduce skewness of numeric features to improve model performance",
       "actions": [
         {
           "action_id": "impute_type",
@@ -50,19 +48,17 @@
           "parameters": {
             "strategy": "most_frequent"
           },
-          "rationale": "The 'type' column has 3607 missing values; imputing with the most frequent category preserves the overall distribution and prevents loss of information.",
+          "rationale": "The 'type' column has 3607 missing entries; imputing with the most frequent category preserves the overall distribution and avoids introducing bias.",
           "model_scope": "all"
         },
         {
-          "action_id": "one_hot_type",
-          "transformation": "one_hot_encode",
+          "action_id": "log_amount",
+          "transformation": "log_transform",
           "columns": [
-            "type"
+            "amount"
           ],
-          "parameters": {
-            "handle_unknown": "ignore"
-          },
-          "rationale": "The 'type' column is categorical and must be one-hot encoded for linear models; unknown categories are ignored to avoid errors during inference.",
+          "parameters": {},
+          "rationale": "The 'amount' feature is highly skewed; applying a log transform stabilizes variance and improves linear model fit while keeping the feature non-negative.",
           "model_scope": "all"
         }
       ]
@@ -77,48 +73,50 @@
       {
         "model_name": "logistic_regression",
         "status": "success",
-        "primary_metric": 0.5545413085817369,
-        "recall": 0.8757442187122101,
-        "precision": 0.2923215807691409,
-        "fit_seconds": 101.61217179964297,
-        "predict_seconds": 0.8536915002623573
+        "primary_metric": 0.4999473333683742,
+        "recall": 0.8816295743335008,
+        "precision": 0.2513829645393044,
+        "fit_seconds": 8.29069870011881,
+        "predict_seconds": 0.9256318001425825
       },
       {
         "model_name": "decision_tree",
         "status": "success",
-        "primary_metric": 0.610104557137343,
-        "recall": 0.7424913489981582,
-        "precision": 0.6193290171544452,
-        "fit_seconds": 23.376021099626087,
-        "predict_seconds": 0.9572639000834897
+        "primary_metric": 0.606613412344032,
+        "recall": 0.7457837296050306,
+        "precision": 0.6178328362896182,
+        "fit_seconds": 13.627677499956917,
+        "predict_seconds": 0.5859660000423901
       },
       {
         "model_name": "random_forest",
         "status": "success",
-        "primary_metric": 0.8316556861769014,
-        "recall": 0.7451444391732247,
-        "precision": 0.7495049135106597,
-        "fit_seconds": 103.31284629984293,
-        "predict_seconds": 4.577153999940492
+        "primary_metric": 0.8299762443368758,
+        "recall": 0.7466688294171271,
+        "precision": 0.7487180326194256,
+        "fit_seconds": 70.79254120006226,
+        "predict_seconds": 2.764498799922876
       }
     ],
-    "data_quality_score": 0.9997227958807469,
-    "preprocessing_seconds": 0.1713019999442622,
-    "memory_rss_start_bytes": 271114240,
-    "peak_memory_bytes": 301334528,
-    "memory_peak_increase_bytes": 30220288
+    "data_quality_score": 0.9992737252075566,
+    "preprocessing_seconds": 0.09524649998638779,
+    "memory_rss_start_bytes": 455970816,
+    "peak_memory_bytes": 524165120,
+    "memory_peak_increase_bytes": 68194304
   },
   "feedback": {
-    "action": "ACCEPT",
-    "reason_code": "improvement_accepted",
-    "reason": "The candidate provides an acceptable benefit without violating guardrails.",
+    "action": "RETRY",
+    "reason_code": "metric_guardrail_violation",
+    "reason": "The candidate violates model-level Recall or Precision guardrails.",
     "plan_id": "plan-1",
     "iteration": 1,
-    "primary_metric_delta": 0.0024287860455035615,
-    "quality_delta": 0.001660914681192227,
-    "runtime_multiplier": 1.6671757657099306,
-    "is_new_best": true,
-    "recommendations": []
+    "primary_metric_delta": -0.014915629041124978,
+    "quality_delta": 0.0017046073304649578,
+    "runtime_multiplier": 1.067220949870399,
+    "is_new_best": false,
+    "recommendations": [
+      "Restore Precision for logistic_regression."
+    ]
   },
   "artifacts": [],
   "warnings": [],
