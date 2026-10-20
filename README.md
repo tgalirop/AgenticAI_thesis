@@ -293,6 +293,10 @@ DQScore = 0.30·Completeness + 0.25·Validity
 
 Οι αλλοιώσεις δημιουργούνται με σταθερό random seed και αποθηκεύονται σε corruption log. Εφόσον είναι γνωστές οι θέσεις και οι πραγματικές τιμές, αξιολογείται άμεσα η ικανότητα εντοπισμού και διόρθωσης προβλημάτων. Η υποβάθμιση γίνεται μετά τον αρχικό διαχωρισμό, ώστε να διατηρείται η ανεξαρτησία του test set.
 
+> **Τελική υλοποίηση:** το τελικό πείραμα εξετάζει μόνο 5% MCAR missingness στη
+> στήλη `type` (seed 42, 3.607 τιμές). Οι υπόλοιπες αλλοιώσεις της λίστας δεν
+> αξιολογήθηκαν και αποτελούν μελλοντική επέκταση.
+
 ## 7. Διαχωρισμός δεδομένων και αποφυγή leakage
 
 Χρησιμοποιείται αρχικός χρονικός διαχωρισμός:
@@ -352,6 +356,11 @@ DQScore = 0.30·Completeness + 0.25·Validity
 - Holm correction για πολλαπλές συγκρίσεις.
 
 Οι paired t-tests του αρχικού R script διατηρούνται ως αναφορά, αλλά η ανάλυση δεν βασίζεται αποκλειστικά σε αυτούς, επειδή τα cross-validation folds δεν είναι πλήρως ανεξάρτητα. Αξιολογείται τόσο η στατιστική όσο και η πρακτική σημασία, μαζί με τον χρόνο εκτέλεσης και τις μεταβολές σε Precision και Recall.
+
+> **Τελική υλοποίηση:** για 12 συγκρίσεις (3 μοντέλα × PR-AUC, Recall, Precision,
+> F1) υπολογίζονται paired Wilcoxon και Nadeau–Bengio corrected resampled t-test,
+> με Holm–Bonferroni στο καθένα. Confidence intervals και effect sizes δεν
+> υλοποιήθηκαν.
 
 ## 11. Προτεινόμενη δομή repository
 
@@ -577,30 +586,54 @@ python -m experiments.run_agentic
 ξεχωριστό process με τον ενεργό Python interpreter και σταματά αμέσως αν κάποιο
 στάδιο αποτύχει, ώστε να μη χρησιμοποιηθούν ελλιπή ή παλιά artifacts.
 
-Η τελική πραγματική εκτέλεση χρησιμοποίησε 72.149 training observations, 5×5
-shared repeated-stratified folds και controlled MCAR missingness σε 3.607 τιμές της
-στήλης `type`. Ο Agent έκανε `ACCEPT` στο πρώτο iteration με plan:
+### Μεθοδολογικές διορθώσεις πριν από το τελικό run
 
-- categorical most-frequent imputation στο `type`,
-- one-hot encoding με ασφαλή unknown-category handling.
+Μετά από μεθοδολογικό έλεγχο (`docs/METHODOLOGICAL_REVIEW_GR.docx`), το commit
+`220fbb3` (17/10/2026) διόρθωσε τέσσερα σημεία:
 
-Το Data Quality Score αυξήθηκε από `0,998062` σε `0,999723` (`+0,001661`). Η μέση
-primary-metric μεταβολή έναντι του degraded conventional baseline ήταν `+0,002429`,
-με runtime multiplier `1,667`, χωρίς παραβίαση Recall/Precision guardrails.
+1. Το Agent plan εφαρμόζεται **πάνω** στο conventional preprocessing
+   (`BaselinePreprocessingContract`). Πριν, ένα plan χωρίς scaling αφαιρούσε σιωπηρά
+   το scaling της Logistic Regression.
+2. Τα `is_transfer`/`is_cash_out` δεν είναι πλέον model features, γιατί
+   αποκάλυπταν την τιμή της `type` που σβηνόταν από την αλλοίωση.
+3. Σε κάθε retry το LLM βλέπει τα προηγούμενα plans, validation issues, αποφάσεις
+   και per-model deltas.
+4. Δίπλα στο Wilcoxon αναφέρεται το corrected resampled t-test των Nadeau–Bengio.
 
-Στο untouched test dataset τα PR-AUC αποτελέσματα ήταν:
+Τα αποτελέσματα του προηγούμενου run (`agentic_20260805T090249Z`) δεν ισχύουν πλέον.
+Λεπτομέρειες στο `docs/REPOSITORY_DEEP_DIVE_GR.md` §2.
+
+### Τελικά αποτελέσματα (run `agentic_20261020T163435Z`)
+
+Η τελική εκτέλεση χρησιμοποίησε 72.149 training observations, 5×5 shared
+repeated-stratified folds και controlled MCAR missingness σε 3.607 τιμές της στήλης
+`type`. Ο Agent χρησιμοποίησε και τα τρία iterations:
+
+| Iteration | Plan | Ενέργειες | Δ mean PR-AUC | Απόφαση |
+|---|---|---|---:|---|
+| 1 | plan-1 | most-frequent imputation (`type`), log transform (`amount`) | −0,014916 | RETRY (πτώση Precision LR) |
+| 2 | plan-2 | standard scaling, μόνο Logistic Regression | 0,000000 | RETRY (καμία βελτίωση) |
+| 3 | plan-3 | constant imputation «missing» (`type`), one-hot encoding | 0,000000 | ACCEPT |
+
+Το Data Quality Score αυξήθηκε από `0,997569` σε `0,999712` (`+0,002143`), με
+runtime multiplier `1,005`. Το plan-3 έγινε `ACCEPT` λόγω βελτίωσης ποιότητας χωρίς
+πτώση της PR-AUC.
+
+Η προβλεπτική απόδοση έμεινε **ταυτόσημη** με το degraded conventional baseline σε
+όλα τα μοντέλα και όλες τις μετρικές: 0 wins και 25 ties σε κάθε σύγκριση, Wilcoxon
+και Nadeau–Bengio p = 1 (Holm). Στο untouched test dataset:
 
 | Model | Conventional | Agentic | Διαφορά |
 |---|---:|---:|---:|
-| Logistic Regression | 0,205972 | 0,213225 | +0,007253 |
-| Decision Tree | 0,080481 | 0,075760 | -0,004721 |
-| Random Forest | 0,353971 | 0,355852 | +0,001881 |
+| Logistic Regression | 0,206409 | 0,206409 | 0,000000 |
+| Decision Tree | 0,083130 | 0,083130 | 0,000000 |
+| Random Forest | 0,347376 | 0,347376 | 0,000000 |
 
-Τα αποτελέσματα δείχνουν ότι η βελτίωση ποιότητας δεν συνεπάγεται ομοιόμορφη
-βελτίωση κάθε classifier. Η επίδραση ήταν θετική στη Logistic Regression και στο
-Random Forest PR-AUC, αλλά αρνητική στο Decision Tree. Τα
-πλήρη fold metrics, test metrics και Holm-corrected Wilcoxon tests βρίσκονται
-στο `reports/`.
+Ο λόγος: ο `OneHotEncoder` του conventional pipeline αντιμετωπίζει ήδη τα missing
+values της `type` ως ξεχωριστή κατηγορία, οπότε το plan-3 παράγει τον ίδιο πίνακα
+χαρακτηριστικών. Επιπλέον η αλλοίωση κόστισε μόλις 0,002–0,008 PR-AUC σε σχέση με τα
+καθαρά δεδομένα. Η μηδενική υπόθεση του RQ1 δεν απορρίπτεται. Τα πλήρη fold metrics,
+test metrics και statistical tests βρίσκονται στο `reports/`.
 
 ### Χρήση μνήμης και LLM
 
@@ -610,20 +643,21 @@ processes. Επειδή τα δύο στάδια δεν ξεκινούν από 
 
 | Pipeline | Αρχικό RSS | Peak RSS | Αύξηση peak |
 |---|---:|---:|---:|
-| Degraded conventional benchmark | 607,289 MiB | 627,738 MiB | 20,449 MiB |
-| Selected Agentic candidate | 258,555 MiB | 287,375 MiB | 28,820 MiB |
+| Degraded conventional benchmark | 587,391 MiB | 636,039 MiB | 48,648 MiB |
+| Selected Agentic candidate | 425,223 MiB | 502,266 MiB | 77,043 MiB |
 
-Το Agentic candidate χρησιμοποίησε κατά το συγκεκριμένο run `8,371 MiB` μεγαλύτερη
-αύξηση peak RSS, δηλαδή περίπου `40,9%` υψηλότερη από το conventional benchmark.
-Η κλήση του `openai/gpt-oss-20b` μέσω Groq ολοκληρώθηκε με ένα επιτυχές request,
-χωρίς failures ή retries: `1.442` prompt tokens, `1.502` completion tokens και
-`2.944` tokens συνολικά, με provider-reported χρόνο `1,728 s`. Το παρατηρούμενο
-κόστος ήταν `$0,00` με τη διαμορφωμένη χρήση του Groq Free Tier. Δεν αποθηκεύονται
-prompts, responses ή API secrets στο telemetry.
+Το Agentic candidate χρησιμοποίησε κατά το συγκεκριμένο run `28,4 MiB` μεγαλύτερη
+αύξηση peak RSS, δηλαδή περίπου `58%` υψηλότερη από το conventional benchmark.
+Οι τρεις κλήσεις του `openai/gpt-oss-20b` μέσω Groq ολοκληρώθηκαν επιτυχώς, χωρίς
+failures ή retries: `5.510` prompt tokens, `3.694` completion tokens και `9.204`
+tokens συνολικά, με provider-reported χρόνο `4,64 s`. Ο συνολικός χρόνος του
+Agentic runner ήταν `497 s`. Το παρατηρούμενο κόστος ήταν `$0,00` με τη
+διαμορφωμένη χρήση του Groq Free Tier. Δεν αποθηκεύονται prompts, responses ή API
+secrets στο telemetry.
 
 Οι παραπάνω τιμές αφορούν μία πλήρη εκτέλεση. Το LLM μπορεί να παράγει διαφορετικό
-έγκυρο plan ακόμη και με μηδενικό temperature, επομένως το αποθηκευμένο run ID
-`agentic_20260805T090249Z` αποτελεί το ενιαίο επίσημο run για αυτά τα αποτελέσματα.
+έγκυρο plan ακόμη και με μηδενικό temperature, επομένως το run ID
+`agentic_20261020T163435Z` αποτελεί το ενιαίο επίσημο run για αυτά τα αποτελέσματα.
 
 ### Τελικά figures για τη συγγραφή
 
@@ -652,3 +686,8 @@ python -m experiments.generate_final_figures
 Ο Agent παρατηρεί τα δεδομένα, εντοπίζει προβλήματα, δημιουργεί στρατηγική, εφαρμόζει ασφαλείς μετασχηματισμούς, εκπαιδεύει και αξιολογεί μοντέλα, λαμβάνει feedback, αναθεωρεί τις αποφάσεις του και τερματίζει επιλέγοντας το καλύτερο pipeline.
 
 Η βασική πειραματική συνεισφορά είναι η άμεση και δίκαιη σύγκριση ενός συμβατικού preprocessing pipeline με ένα επαναληπτικό LangGraph Agentic AI pipeline, χρησιμοποιώντας τα ίδια μοντέλα, folds, δεδομένα και κριτήρια αξιολόγησης.
+
+Στο τελικό πείραμα ο Agent λειτούργησε όπως σχεδιάστηκε, αλλά δεν βελτίωσε την
+προβλεπτική απόδοση, επειδή το conventional pipeline χειριζόταν ήδη το εξεταζόμενο
+πρόβλημα ποιότητας. Το εύρημα δείχνει ότι η αξία της Agentic προεπεξεργασίας
+εξαρτάται από την ισχύ του baseline και τη σοβαρότητα του προβλήματος ποιότητας.

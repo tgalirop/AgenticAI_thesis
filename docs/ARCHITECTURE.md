@@ -190,6 +190,33 @@ scope, διατηρεί τη σειρά τους ανά στήλη και κλω
 έλεγχο και αρνείται execution σε validation-fold ή test dataset context, ακόμη
 και αν του δοθεί χειροκίνητα ένα φαινομενικά έγκυρο result.
 
+### Το plan εφαρμόζεται πάνω στο conventional baseline
+
+Ένα Agent plan **τροποποιεί** το conventional preprocessing· δεν το αντικαθιστά.
+Ο `ModelPipelineBuilder` δέχεται injected `BaselinePreprocessingContract`, που
+περιγράφει δηλωτικά τι κάνει το conventional pipeline:
+
+- one-hot encoding (`handle_unknown="ignore"`) στη `type` για όλα τα μοντέλα·
+- standard scaling στα numeric features μόνο για τη Logistic Regression.
+
+Για κάθε στήλη, τα βήματα του plan μπαίνουν πρώτα. Μετά προστίθενται τα βήματα του
+baseline **των οποίων το είδος δεν ζήτησε ήδη το plan** για τη συγκεκριμένη στήλη.
+Παραδείγματα:
+
+| Plan για τη στήλη | Τελικό pipeline της στήλης |
+|---|---|
+| τίποτα | ακριβώς το baseline |
+| `impute_categorical` στη `type` | imputation → baseline one-hot |
+| `one_hot_encode` στη `type` | μόνο το one-hot του plan (το baseline one-hot παραλείπεται) |
+| `log_transform` στο `amount` (LR) | log → baseline standard scaling |
+| `scale_numeric` (LR) | μόνο το scaling του plan (το baseline scaling παραλείπεται) |
+
+Οι στήλες τοποθετούνται με τη σειρά του conventional transformer, ώστε και τα δύο
+pipelines να βλέπουν την ίδια διάταξη χαρακτηριστικών. Έτσι κάθε διαφορά μεταξύ
+conventional και Agentic οφείλεται μόνο στις ενέργειες του plan. Πριν από τις
+17/10/2026 ο builder έχτιζε το pipeline μόνο από το plan, οπότε ένα plan χωρίς
+`scale_numeric` αφαιρούσε σιωπηρά το scaling της Logistic Regression.
+
 ## Shared cross-validation και ML evaluation
 
 Η conventional και η Agentic αξιολόγηση χρησιμοποιούν την ίδια κλάση
@@ -232,6 +259,25 @@ STOP_INVALID_STRATEGIES
 STOP_EXECUTION_ERROR
 ```
 
+Η policy εφαρμόζει τους ελέγχους με σταθερή σειρά και σταματά στον πρώτο που
+αποτυγχάνει. Οι τιμές είναι αυτές του `configs/agent.yaml`:
+
+| Σειρά | Έλεγχος | Όριο | Αν αποτύχει |
+|---|---|---|---|
+| 1 | Valid plan (Validator) | — | `RETRY`· `STOP_INVALID_STRATEGIES` μετά από 2 invalid |
+| 2 | Επιτυχής execution | — | `RETRY`· `STOP_EXECUTION_ERROR` μετά από 2 errors ή fatal error |
+| 3 | Όλα τα μοντέλα αξιολογήθηκαν επιτυχώς | `require_all_models_successful` | `RETRY` |
+| 4 | Πτώση Recall ή Precision ανά μοντέλο έναντι baseline | ≤ 0,02 | `RETRY` (`metric_guardrail_violation`) |
+| 5 | Runtime multiplier | ≤ 3,0 | `RETRY` (`excessive_runtime_cost`) |
+| 6 | Όφελος: Δ mean PR-AUC ≥ 0,005 **ή** (Δ quality ≥ 0,0001 **και** Δ PR-AUC ≥ 0) | — | `ACCEPT` αν ισχύει, αλλιώς `RETRY` (`insufficient_improvement`) |
+
+Κάθε `RETRY` μετατρέπεται σε `STOP_MAX_ITERATIONS` όταν εξαντληθούν τα 3
+iterations, ή σε `STOP_NO_IMPROVEMENT` όταν 3 διαδοχικές προσπάθειες δεν βελτιώνουν
+την PR-AUC (`no_improvement_patience`).
+
+Ο κανόνας 6 σημαίνει ότι ένα plan μπορεί να γίνει `ACCEPT` μόνο λόγω βελτίωσης
+ποιότητας, με αμετάβλητη PR-AUC. Αυτό συνέβη στο run της 20/10/2026 (plan-3).
+
 Το `AgentState` είναι immutable και πλήρως serializable. Δεν περιέχει fitted
 pipelines, model clients ή άλλες μη αναπαραγώγιμες Python αναφορές. Αποθηκεύει
 typed summaries, plans, validation, feedback και artifact references. Μόνο ο
@@ -266,7 +312,23 @@ TransformationPlan → Validator → Executor
 ```
 
 Το prompt περιλαμβάνει μόνο compact metadata και metrics. Δεν περιλαμβάνει raw
-PaySim rows και δεν επιτρέπεται πρόσβαση στο test dataset. Το endpoint λαμβάνει
+PaySim rows και δεν επιτρέπεται πρόσβαση στο test dataset. Συγκεκριμένα, το
+`StrategyPromptContext` περιέχει:
+
+- dataset schema (στήλες, τύποι, protected target)·
+- quality metrics και missingness ανά στήλη·
+- baseline metrics ανά μοντέλο και το baseline pipeline contract, μαζί με τη ρητή
+  δήλωση ότι το plan εφαρμόζεται πάνω στο baseline·
+- allowlisted transformations και τα parameter contracts τους·
+- `previous_iterations`: για κάθε προηγούμενο iteration, το plan, τα validation
+  issues, το execution status/errors, την απόφαση με `reason_code`, τα mean
+  primary/quality deltas, τον runtime multiplier και τα per-model deltas PR-AUC,
+  Recall και Precision έναντι του baseline.
+
+Τα `previous_iterations` παράγονται από τον `IterationHistorySummarizer` στο
+`graph.py`. Το system prompt ζητά ρητά να μην ξαναυποβληθεί plan που έχει ήδη
+αξιολογηθεί και να διορθωθεί κάθε validation issue. Πριν από τις 17/10/2026 το
+LLM λάμβανε σε retry μόνο τα γενικά `recommendations` της policy. Το endpoint λαμβάνει
 το JSON Schema του `TransformationPlan`, αλλά η απάντηση θεωρείται πάντοτε μη
 έμπιστη: περνά ξανά από strict Pydantic validation (`extra="forbid"`) και από
 ελέγχους dataset/iteration identity. Το LLM προτείνει μόνο allowlisted declarative
@@ -308,15 +370,19 @@ Nodes:
 
 Για κάθε valid plan καλεί τον `TransformationExecutor`, τον
 `MachineLearningEvaluator` και ένα injected `PlanQualityEvaluatorProtocol`, και
-επιστρέφει μόνο `CandidateAssessment`. Η concrete quality υλοποίηση θα συνδεθεί με
-το controlled-degradation πείραμα, ώστε το Data Quality Score να βασίζεται σε
-μετρημένη post-transformation ποιότητα και όχι σε εκτίμηση του LLM.
+επιστρέφει μόνο `CandidateAssessment`. Η concrete quality υλοποίηση είναι ο
+`TransformationAwarePlanQualityEvaluator`, οπότε το Data Quality Score βασίζεται σε
+μετρημένη post-transformation ποιότητα και όχι σε εκτίμηση του LLM. Στο sampled
+πείραμα το report μετρά μόνο completeness και duplicates· τα validity και
+consistency checks είναι κενά και δίνουν πάντα 1.
 
 ## Controlled degradation και experiment lifecycle
 
 Το `ControlledDataDegrader` εφαρμόζει deterministic MCAR missingness μόνο σε deep
 copy του reproducible training sample. Target, source Parquet και test
-test dataset προστατεύονται. Ο `TransformationAwarePlanQualityEvaluator` εφαρμόζει σε
+dataset προστατεύονται. Τα `is_transfer` και `is_cash_out` υπολογίζονται από τη
+`type` πριν από την αλλοίωση, γι' αυτό δεν είναι model features: αλλιώς θα
+αποκάλυπταν στο μοντέλο την τιμή της `type` που σβήστηκε. Ο `TransformationAwarePlanQualityEvaluator` εφαρμόζει σε
 αντίγραφο μόνο quality-relevant actions (numeric/categorical imputation) και
 επανυπολογίζει τον Data Quality Score· scaling, encoding και sampling δεν
 βαφτίζονται λανθασμένα ως quality improvements.
@@ -326,13 +392,33 @@ test dataset προστατεύονται. Ο `TransformationAwarePlanQualityEva
 ```text
 shared sample → controlled degradation → conventional shared-fold baseline
 → LangGraph search → locked accepted plan → Agentic shared-fold benchmark
-→ paired Wilcoxon/Holm tests → one-time test dataset evaluation
+→ paired Wilcoxon + Nadeau–Bengio tests (Holm) → one-time test dataset evaluation
 ```
+
+Το Wilcoxon αντιμετωπίζει τις 25 fold διαφορές ως ανεξάρτητες. Τα training sets του
+repeated k-fold όμως επικαλύπτονται, οπότε αναφέρεται δίπλα και το corrected
+resampled t-test των Nadeau–Bengio. Αυτό αυξάνει τη διασπορά κατά τον λόγο
+`n_validation / n_train` (≈ 0,25 με 5 folds) και είναι το πιο συντηρητικό από τα δύο.
 
 Το test Parquet δεν διαβάζεται πριν ολοκληρωθεί το graph και επιλεγεί το plan.
 Τα μεγάλα OOF/test predictions και checkpoints παραμένουν εκτός Git, ενώ τα
 compact aggregate metrics, statistical tests, final plan και run summary είναι
 trackable για αναπαραγωγιμότητα.
+
+## Μεθοδολογικές διορθώσεις (commit `220fbb3`, 17/10/2026)
+
+Μετά τον μεθοδολογικό έλεγχο (`docs/METHODOLOGICAL_REVIEW_GR.docx`) διορθώθηκαν
+τέσσερα σημεία που επηρέαζαν την εγκυρότητα της σύγκρισης:
+
+| # | Πριν | Μετά | Εύρημα review |
+|---|---|---|---|
+| 1 | Το pipeline χτιζόταν μόνο από το plan· η Agentic LR έχανε το scaling | Το plan εφαρμόζεται πάνω στο `BaselinePreprocessingContract` | 4.2 |
+| 2 | `is_transfer`/`is_cash_out` ήταν model features και διέρρεαν τη σβησμένη `type` | Αφαιρέθηκαν από τα model features | 4.1, 5.1 |
+| 3 | Σε retry το LLM έβλεπε μόνο γενικά recommendations | Βλέπει plans, issues, αποφάσεις και per-model deltas | 5.6 |
+| 4 | Μόνο Wilcoxon | Wilcoxon + Nadeau–Bengio, και τα δύο με Holm | 5.3 |
+
+Τα αποτελέσματα πριν από αυτό το commit (run `agentic_20260805T090249Z`) δεν είναι
+συγκρίσιμα με τα μεταγενέστερα και δεν πρέπει να αναμιγνύονται.
 
 ## Definition of Done για Agentic components
 
