@@ -20,6 +20,7 @@ from sklearn.metrics import average_precision_score, precision_recall_curve, roc
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REPORTS = REPO_ROOT / "reports"
+CHECKPOINTS = REPO_ROOT / "artifacts" / "checkpoints"
 OUTPUT = REPO_ROOT / "interactive_explorer" / "backend" / "data" / "thesis_snapshot.json"
 MODEL_LABELS = {
     "logistic_regression": "Logistic Regression",
@@ -142,6 +143,65 @@ def oof_curves() -> list[dict[str, Any]]:
     return results
 
 
+def describe_actions(plan: dict[str, Any]) -> str:
+    """Summarise plan actions as 'transformation(columns)' for short UI labels."""
+
+    parts = []
+    for action in plan["actions"]:
+        scope = "" if action.get("model_scope", "all") == "all" else f" [{action['model_scope']}]"
+        parts.append(f"{action['transformation']}({', '.join(action['columns'])}){scope}")
+    return " + ".join(parts)
+
+
+def iteration_history(checkpoint: dict[str, Any]) -> list[dict[str, Any]]:
+    """Compact, UI-friendly audit of every Agent iteration of the official run."""
+
+    history: list[dict[str, Any]] = []
+    for record in checkpoint["history"]:
+        feedback = record["feedback"]
+        history.append(
+            {
+                "iteration": int(record["iteration"]),
+                "plan_id": record["plan"]["plan_id"],
+                "actions": record["plan"]["actions"],
+                "actions_summary": describe_actions(record["plan"]),
+                "validation_valid": bool(record["validation"]["is_valid"]),
+                "validation_issues": record["validation"].get("issues", []),
+                "decision": feedback["action"],
+                "reason_code": feedback["reason_code"],
+                "reason": feedback["reason"],
+                "primary_metric_delta": feedback.get("primary_metric_delta"),
+                "quality_delta": feedback.get("quality_delta"),
+                "runtime_multiplier": feedback.get("runtime_multiplier"),
+                "recommendations": feedback.get("recommendations", []),
+            }
+        )
+    return history
+
+
+def result_caveats(paired_tests: list[dict[str, Any]], degraded: list[dict[str, Any]]) -> list[str]:
+    """Derive result-dependent caveats from the artifacts instead of fixed text."""
+
+    caveats: list[str] = []
+    if all(abs(float(row["mean_delta"])) < 1e-12 for row in paired_tests):
+        caveats.append(
+            "Όλες οι paired διαφορές είναι μηδενικές. Ο OneHotEncoder του conventional pipeline "
+            "αντιμετωπίζει ήδη τα missing values ως ξεχωριστή κατηγορία, οπότε το επιλεγμένο plan "
+            "δεν αλλάζει την πληροφορία που φτάνει στα μοντέλα."
+        )
+    clean_path = REPORTS / "metrics" / "conventional_results.csv"
+    if clean_path.is_file():
+        clean = {row["model"]: float(row["pr_auc_mean"]) for row in read_csv(clean_path)}
+        drops = [clean[row["model"]] - float(row["pr_auc_mean"]) for row in degraded if row["model"] in clean]
+        if drops:
+            low, high = (f"{value:.3f}".replace(".", ",") for value in (min(drops), max(drops)))
+            caveats.append(
+                f"Η αλλοίωση κόστισε μόλις {low}–{high} PR-AUC σε σχέση με τα καθαρά δεδομένα, "
+                "άρα το περιθώριο βελτίωσης ήταν πολύ μικρό."
+            )
+    return caveats
+
+
 def label_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     """Add presentation labels while retaining original machine identifiers."""
 
@@ -156,9 +216,13 @@ def label_rows(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
     return labelled
 
 
-def workflow_steps() -> list[dict[str, Any]]:
+def workflow_steps(run: dict[str, Any], selected: dict[str, Any]) -> list[dict[str, Any]]:
     """Describe the real pipeline in beginner-friendly, clickable stages."""
 
+    plan_id = selected["plan_id"]
+    actions = selected["actions_summary"]
+    iteration = selected["iteration"]
+    decision = selected["decision"]
     return [
         {
             "id": "raw",
@@ -192,11 +256,11 @@ def workflow_steps() -> list[dict[str, Any]]:
             "title": "Leakage-safe feature engineering",
             "short": "Δημιουργία row-wise χαρακτηριστικών χωρίς πληροφορία από το μέλλον ή το label.",
             "why": "Παράγει χρήσιμα μοντελοποιήσιμα χαρακτηριστικά χωρίς data leakage.",
-            "how": "Κάθε νέο feature υπολογίζεται μόνο από την ίδια γραμμή: hour/day από step, log_amount από amount και binary indicators από type/nameDest. Αφαιρούνται identifiers, balances και isFlaggedFraud.",
-            "avoids": "Αποφεύγουμε features που αποκαλύπτουν άμεσα το label, απομνημόνευση λογαριασμών και πληροφορία από άλλες ή μελλοντικές γραμμές.",
-            "takeaway": "Είναι preprocessing σε επίπεδο dataset, πριν από το fold-local imputation, encoding, scaling και classifier fit.",
+            "how": "Κάθε νέο feature υπολογίζεται μόνο από την ίδια γραμμή: hour/day από step, log_amount από amount και is_merchant_destination από nameDest. Αφαιρούνται identifiers, balances και isFlaggedFraud. Τα is_transfer/is_cash_out υπολογίζονται για consistency checks, αλλά δεν δίνονται στα μοντέλα.",
+            "avoids": "Αποφεύγουμε features που αποκαλύπτουν άμεσα το label, απομνημόνευση λογαριασμών και πληροφορία από άλλες ή μελλοντικές γραμμές. Τα is_transfer/is_cash_out θα αποκάλυπταν στο μοντέλο την τιμή της type που σβήνει η αλλοίωση.",
+            "takeaway": "Είναι preprocessing σε επίπεδο dataset, πριν από το fold-local imputation, encoding, scaling και classifier fit. Τα μοντέλα βλέπουν 7 features: type, step, amount, hour, day, log_amount, is_merchant_destination.",
             "input": "Validated PaySim columns",
-            "output": "10-column modeling table",
+            "output": "7 model features + target",
             "source_files": ["src/agenticai_thesis/data/features.py"],
         },
         {
@@ -244,7 +308,7 @@ def workflow_steps() -> list[dict[str, Any]]:
             "title": "Conventional vs LangGraph Agent",
             "short": "Το ίδιο degraded sample περνά και στα δύο pipelines.",
             "why": "Απομονώνει όσο γίνεται την επίδραση της διαφορετικής στρατηγικής preprocessing.",
-            "how": "Τα ίδια fold indices, μοντέλα, labels και degraded rows δίνονται σε δύο κλάδους. Αλλάζει η σύνθεση του preprocessing pipeline, όχι το validation περιβάλλον.",
+            "how": "Τα ίδια fold indices, μοντέλα, labels και degraded rows δίνονται σε δύο κλάδους. Αλλάζει η σύνθεση του preprocessing pipeline, όχι το validation περιβάλλον. Το conventional pipeline κάνει one-hot στη type (τα missing γίνονται δική τους κατηγορία) και standard scaling μόνο για τη Logistic Regression.",
             "avoids": "Αποφεύγουμε άδικη σύγκριση όπου το ένα pipeline θα έβλεπε ευκολότερα folds ή διαφορετικές missing θέσεις.",
             "takeaway": "Δεν συγκρίνουμε δύο datasets· συγκρίνουμε δύο μεθόδους πάνω στο ίδιο dataset σε κάθε στάδιο.",
             "input": "Identical rows and missing positions",
@@ -257,11 +321,11 @@ def workflow_steps() -> list[dict[str, Any]]:
             "title": "Agent plan & deterministic execution",
             "short": "Profile → LLM plan → Validator → Executor → Feedback.",
             "why": "Το LLM προτείνει μόνο declarative plan· ασφαλής Python κώδικας το ελέγχει και το εκτελεί.",
-            "how": "Ο profiler μετρά τα defects, το LLM επιστρέφει περιορισμένο JSON plan, ο Validator ελέγχει στήλες/ενέργειες/παραμέτρους και ο Executor δημιουργεί γνωστά sklearn objects.",
-            "avoids": "Αποφεύγουμε πρόσβαση του LLM σε raw rows, arbitrary Python/SQL/shell και άμεση εκτέλεση μη ελεγμένης πρότασης.",
-            "takeaway": "Ο Agent είναι ολόκληρο το LangGraph σύστημα ενορχήστρωσης· το LLM είναι μόνο ο Strategy Generator μέσα σε αυτό.",
+            "how": "Ο profiler μετρά τα defects, το LLM επιστρέφει περιορισμένο JSON plan, ο Validator ελέγχει στήλες/ενέργειες/παραμέτρους και ο Executor δημιουργεί γνωστά sklearn objects. Το plan εφαρμόζεται πάνω στο conventional preprocessing (BaselinePreprocessingContract): ό,τι δεν αλλάζει ρητά, όπως το scaling της Logistic Regression, μένει ίδιο. Σε κάθε retry το LLM βλέπει τα προηγούμενα plans, τα validation issues, τις αποφάσεις και τα per-model deltas.",
+            "avoids": "Αποφεύγουμε πρόσβαση του LLM σε raw rows, arbitrary Python/SQL/shell, άμεση εκτέλεση μη ελεγμένης πρότασης και άδικη σύγκριση όπου το plan θα αφαιρούσε σιωπηρά βήματα του baseline.",
+            "takeaway": f"Ο Agent είναι ολόκληρο το LangGraph σύστημα ενορχήστρωσης· το LLM είναι μόνο ο Strategy Generator μέσα σε αυτό. Στο επίσημο run χρειάστηκαν {run['iterations']} iterations.",
             "input": "Compact quality evidence, όχι raw rows",
-            "output": "plan-1: imputation + one-hot encoding",
+            "output": f"{plan_id}: {actions}",
             "source_files": ["src/agenticai_thesis/agentic/validator.py", "src/agenticai_thesis/agentic/execution.py"],
         },
         {
@@ -281,14 +345,15 @@ def workflow_steps() -> list[dict[str, Any]]:
             "id": "freeze",
             "order": 10,
             "title": "Freeze selected plan",
-            "short": "Το plan-1 γίνεται ACCEPT στην πρώτη iteration και κλειδώνει.",
+            "short": f"Το {plan_id} γίνεται {decision} στην iteration {iteration} και κλειδώνει.",
+            "node_subtitle": f"{plan_id} · {decision} · iteration {iteration}",
             "why": "Απαγορεύει αλλαγές μετά την αποκάλυψη του final test dataset.",
-            "how": "Με βάση μόνο training quality και CV evidence το feedback επιστρέφει ACCEPT. Καταγράφεται το plan-1 και η στρατηγική του δεν επιτρέπεται να αλλάξει στο test dataset.",
+            "how": f"Με βάση μόνο training quality και CV evidence η deterministic FeedbackPolicy επιστρέφει {decision} ({selected['reason_code']}). Καταγράφεται το {plan_id} και η στρατηγική του δεν επιτρέπεται να αλλάξει στο test dataset.",
             "avoids": "Αποφεύγουμε test leakage και εκ των υστέρων επιλογή plan επειδή έτυχε να αποδώσει καλύτερα στις τελικές συναλλαγές.",
-            "takeaway": "Παγώνει η μέθοδος most_frequent + one-hot, όχι οι learned τιμές· imputer, encoder και classifier κάνουν νέο fit μόνο στα training δεδομένα.",
+            "takeaway": f"Παγώνει η μέθοδος {actions}, όχι οι learned τιμές· imputer, encoder και classifier κάνουν νέο fit μόνο στα training δεδομένα.",
             "input": "Training evidence and feedback guardrails",
             "output": "Frozen validated plan",
-            "source_files": ["experiments/run_agentic.py", "reports/transformation_plans/plan-1.json"],
+            "source_files": ["experiments/run_agentic.py", f"reports/transformation_plans/{plan_id}.json"],
         },
         {
             "id": "test_dataset",
@@ -307,9 +372,9 @@ def workflow_steps() -> list[dict[str, Any]]:
             "id": "statistics",
             "order": 12,
             "title": "Statistics & operational evidence",
-            "short": "Wilcoxon paired tests, Holm correction, runtime, memory και LLM usage.",
+            "short": "Wilcoxon και Nadeau–Bengio paired tests, Holm correction, runtime, memory και LLM usage.",
             "why": "Ξεχωρίζει τη σταθερότητα της διαφοράς από το μέγεθός της και καταγράφει το κόστος.",
-            "how": "Για κάθε model/metric ελέγχονται οι 25 paired διαφορές με Wilcoxon. Η Holm correction διορθώνει τα p-values για τις πολλαπλές συγκρίσεις. Παράλληλα καταγράφονται χρόνος, RSS και tokens.",
+            "how": "Για κάθε model/metric ελέγχονται οι 25 paired διαφορές με Wilcoxon και με το corrected resampled t-test των Nadeau–Bengio, που διορθώνει για την επικάλυψη των training sets του repeated CV. Η Holm correction διορθώνει τα p-values για τις πολλαπλές συγκρίσεις. Παράλληλα καταγράφονται χρόνος, RSS και tokens.",
             "avoids": "Αποφεύγουμε να χαρακτηρίσουμε μια τυχαία διαφορά ως εύρημα ή να αγνοήσουμε ότι η Agentic λειτουργία απαιτεί πρόσθετους πόρους.",
             "takeaway": "Στατιστικά σημαντικό σημαίνει συνεπές ως προς τα folds, όχι απαραίτητα μεγάλο, χρήσιμο ή καθολικά καλύτερο αποτέλεσμα.",
             "input": "25 fold pairs + run telemetry",
@@ -319,12 +384,61 @@ def workflow_steps() -> list[dict[str, Any]]:
     ]
 
 
-def langgraph_payload(run: dict[str, Any], plan_record: dict[str, Any]) -> dict[str, Any]:
+def official_trace_steps(
+    run: dict[str, Any],
+    history: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    max_iterations: int,
+) -> list[dict[str, Any]]:
+    """Replay every recorded iteration of the official checkpoint as UI trace steps."""
+
+    missing = int(run["degradation"]["type"])
+    steps: list[dict[str, Any]] = []
+    for item, record in zip(history, records, strict=True):
+        i = item["iteration"]
+        plan_id = item["plan_id"]
+        steps.append({"node": "prepare_iteration", "title": f"Iteration {i}: ασφαλές training context", "detail": f"Role=training, dataset_id συμφωνεί, iteration {i}/{max_iterations} διαθέσιμη.", "state_change": "Καμία μεταβολή· guard passed."})
+        evidence = (
+            f"Το LLM είδε {missing:,} missing στη type και τα baseline metrics.".replace(",", ".")
+            if i == 1
+            else "Το LLM είδε επιπλέον τα previous_iterations: plans, αποφάσεις και per-model deltas "
+            + ("της iteration 1." if i == 2 else f"των iterations 1–{i - 1}.")
+        )
+        steps.append({"node": "generate_strategy", "title": f"Πρόταση {plan_id}", "detail": f"{evidence} Πρότεινε: {item['actions_summary']}.", "state_change": f"current_plan = {plan_id}"})
+        if item["validation_valid"]:
+            steps.append({"node": "validate_strategy", "title": "Το plan εγκρίθηκε", "detail": "Όλες οι actions είναι allowlisted, οι στήλες υπάρχουν και δεν είναι protected, οι παράμετροι είναι έγκυρες.", "state_change": "current_validation.is_valid = true"})
+            quality = record["assessment"]["data_quality_score"]
+            steps.append({"node": "evaluate_candidate", "title": "Deterministic εκτέλεση και CV", "detail": f"Το plan εφαρμόστηκε πάνω στο baseline preprocessing. Quality={quality:.6f}. Όλα τα 3 μοντέλα αξιολογήθηκαν στα 25 κοινά folds.", "state_change": "current_assessment = quality + ML + cost evidence"})
+        else:
+            issues = ", ".join(issue.get("code", "issue") for issue in item["validation_issues"]) or "validation issues"
+            steps.append({"node": "validate_strategy", "title": "Το plan απορρίφθηκε", "detail": f"Ο Validator επέστρεψε: {issues}.", "state_change": "current_validation.is_valid = false"})
+            steps.append({"node": "assess_invalid_strategy", "title": "Καμία εκτέλεση", "detail": "Το invalid plan έγινε typed assessment χωρίς Executor ή model fit.", "state_change": "validation_valid = false"})
+        primary = item["primary_metric_delta"]
+        quality_delta = item["quality_delta"]
+        runtime = item["runtime_multiplier"]
+        numbers = []
+        if primary is not None:
+            numbers.append(f"Δ PR-AUC={primary:+.6f}")
+        if quality_delta is not None:
+            numbers.append(f"Δ quality={quality_delta:+.6f}")
+        if runtime is not None:
+            numbers.append(f"runtime={runtime:.3f}×")
+        advice = f" Σύσταση: {' '.join(item['recommendations'])}" if item["recommendations"] else ""
+        steps.append({"node": "decide_feedback", "title": f"{item['decision']} — {item['reason_code']}", "detail": f"{', '.join(numbers)}. {item['reason']}{advice}", "state_change": f"current_feedback.action = {item['decision']}"})
+        terminal = item["decision"] != "RETRY"
+        steps.append({"node": "record_iteration", "title": "Immutable audit record", "detail": f"Η iteration {i} αποθηκεύτηκε στο checkpoint." + (f" Το {plan_id} σημειώθηκε ως selected/frozen." if item["decision"] == "ACCEPT" else ""), "state_change": f"status={'completed' if terminal else 'running'}, iteration={i}" + (f", termination={item['decision']}" if terminal else "")})
+    steps.append({"node": "END", "title": "Τερματισμός graph", "detail": f"Τερματισμός με {run['termination_action']} μετά από {run['iterations']} iteration(s).", "state_change": "LangGraph returns final AgentState"})
+    return steps
+
+
+def langgraph_payload(
+    run: dict[str, Any],
+    history: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    max_iterations: int,
+) -> dict[str, Any]:
     """Describe the compiled StateGraph and official trace without inventing execution data."""
 
-    feedback = plan_record["feedback"]
-    assessment = plan_record["assessment"]
-    plan = plan_record["plan"]
     nodes = [
         {
             "id": "prepare_iteration", "label": "Prepare iteration", "kind": "deterministic_guard", "x": 80, "y": 210,
@@ -335,8 +449,8 @@ def langgraph_payload(run: dict[str, Any], plan_record: dict[str, Any]) -> dict[
         },
         {
             "id": "generate_strategy", "label": "Generate strategy", "kind": "llm", "x": 350, "y": 210,
-            "reads": ["dataset_context", "quality_metrics", "baseline_metrics", "previous_feedback"], "writes": ["current_plan"],
-            "responsibility": "Συνθέτει compact prompt evidence και ζητά από το Groq-hosted GPT-OSS ένα αυστηρά typed TransformationPlan.",
+            "reads": ["dataset_context", "quality_metrics", "baseline_metrics", "previous_feedback", "previous_iterations"], "writes": ["current_plan"],
+            "responsibility": "Συνθέτει compact prompt evidence (μαζί με το ιστορικό των προηγούμενων iterations) και ζητά από το Groq-hosted GPT-OSS ένα αυστηρά typed TransformationPlan.",
             "why": "Το LLM χρησιμοποιείται εκεί που χρειάζεται reasoning/πρόταση, όχι για αριθμητικούς υπολογισμούς ή εκτέλεση κώδικα.",
             "implementation": "GenerateStrategyNode + StrategyGenerator",
         },
@@ -350,7 +464,7 @@ def langgraph_payload(run: dict[str, Any], plan_record: dict[str, Any]) -> dict[
         {
             "id": "evaluate_candidate", "label": "Evaluate valid candidate", "kind": "deterministic_work", "x": 900, "y": 90,
             "reads": ["current_validation", "dataset_context"], "writes": ["current_assessment", "current_errors"],
-            "responsibility": "Μετατρέπει allowlisted actions σε sklearn objects και μετρά quality, 3-model CV metrics, runtime και memory.",
+            "responsibility": "Μετατρέπει allowlisted actions σε sklearn objects πάνω στο baseline preprocessing και μετρά quality, 3-model CV metrics, runtime και memory.",
             "why": "Η ίδια deterministic ML μηχανή παράγει συγκρίσιμη και αναπαραγώγιμη απόδειξη για το plan.",
             "implementation": "EvaluateCandidateNode + CandidateEvaluator",
         },
@@ -388,23 +502,15 @@ def langgraph_payload(run: dict[str, Any], plan_record: dict[str, Any]) -> dict[
         {"source": "record_iteration", "target": "prepare_iteration", "label": "RETRY", "condition": True},
         {"source": "record_iteration", "target": "END", "label": "completed", "condition": True},
     ]
-    official_trace = [
-        {"node": "prepare_iteration", "title": "Ασφαλές training context", "detail": "Role=training, dataset_id συμφωνεί, iteration 1/3 διαθέσιμη.", "state_change": "Καμία μεταβολή· guard passed."},
-        {"node": "generate_strategy", "title": "Μία LLM πρόταση", "detail": f"Το LLM είδε 3.607 missing στη type και επέστρεψε {plan['plan_id']} με {len(plan['actions'])} actions.", "state_change": "current_plan = plan-1"},
-        {"node": "validate_strategy", "title": "Το plan εγκρίθηκε", "detail": "Οι actions impute_categorical και one_hot_encode είναι allowlisted, η type υπάρχει και δεν είναι protected.", "state_change": "current_validation.is_valid = true"},
-        {"node": "evaluate_candidate", "title": "Deterministic εκτέλεση και CV", "detail": f"Quality={assessment['data_quality_score']:.6f}. Όλα τα 3 μοντέλα ολοκλήρωσαν επιτυχώς.", "state_change": "current_assessment = quality + ML + cost evidence"},
-        {"node": "decide_feedback", "title": "ACCEPT από διαφανείς guardrails", "detail": f"Primary delta={feedback['primary_metric_delta']:+.6f}, quality delta={feedback['quality_delta']:+.6f}, runtime={feedback['runtime_multiplier']:.3f}×. Η quality βελτίωση πέρασε το 0,0001 χωρίς αρνητικό primary delta ή guardrail violation.", "state_change": "current_feedback.action = ACCEPT"},
-        {"node": "record_iteration", "title": "Immutable audit record", "detail": "Η iteration αποθηκεύτηκε στο checkpoint και το plan-1 σημειώθηκε ως best/frozen.", "state_change": "status=completed, iteration=1, termination=ACCEPT"},
-        {"node": "END", "title": "Τερματισμός graph", "detail": "Δεν έγινε δεύτερη iteration επειδή το ACCEPT είναι terminal action.", "state_change": "LangGraph returns final AgentState"},
-    ]
+    official_trace = official_trace_steps(run, history, records, max_iterations)
     invalid_trace = [
         {"node": "prepare_iteration", "title": "Έναρξη iteration", "detail": "Το context περνά τους αρχικούς guards.", "state_change": "iteration remains pending"},
         {"node": "generate_strategy", "title": "Υποθετική μη ασφαλής πρόταση", "detail": "Παράδειγμα: το LLM ζητά μετασχηματισμό της protected isFraud ή άγνωστο transformation.", "state_change": "current_plan = unsafe example"},
         {"node": "validate_strategy", "title": "Deterministic απόρριψη", "detail": "Ο Validator επιστρέφει protected_column_reference ή transformation_not_allowed.", "state_change": "current_validation.is_valid = false"},
         {"node": "assess_invalid_strategy", "title": "Καμία εκτέλεση δεδομένων", "detail": "Το invalid plan μετατρέπεται σε assessment χωρίς Executor, imputer ή model fit.", "state_change": "validation_valid = false"},
         {"node": "decide_feedback", "title": "RETRY αν υπάρχει περιθώριο", "detail": "Η policy ζητά διόρθωση. Με δύο συνεχόμενα invalid strategies θα σταματούσε με STOP_INVALID_STRATEGIES.", "state_change": "current_feedback.action = RETRY"},
-        {"node": "record_iteration", "title": "Καταγραφή αποτυχίας", "detail": "Τα validation issues αποθηκεύονται ως warnings για audit και επόμενο prompt feedback.", "state_change": "history += invalid iteration; status=running"},
-        {"node": "prepare_iteration", "title": "Νέα iteration", "detail": "Το graph κάνει loop και οι recommendations περνούν στο επόμενο compact prompt.", "state_change": "iteration increments; retry loop"},
+        {"node": "record_iteration", "title": "Καταγραφή αποτυχίας", "detail": "Τα validation issues αποθηκεύονται στο IterationRecord για audit.", "state_change": "history += invalid iteration; status=running"},
+        {"node": "prepare_iteration", "title": "Νέα iteration", "detail": "Το graph κάνει loop. Το επόμενο prompt περιέχει στα previous_iterations το απορριφθέν plan και τα συγκεκριμένα validation issues.", "state_change": "iteration increments; retry loop"},
     ]
     return {
         "library": "LangGraph StateGraph (Python)",
@@ -428,8 +534,10 @@ def langgraph_payload(run: dict[str, Any], plan_record: dict[str, Any]) -> dict[
             {"choice": "Deterministic Validator και Executor", "reason": "Το prompt καθοδηγεί, αλλά μόνο κώδικας/allowlist επιβάλλει ασφάλεια και δημιουργεί trusted sklearn objects."},
             {"choice": "Immutable Pydantic state + JSON checkpoint", "reason": "Κάθε μετάβαση είναι validated, auditable και ανακτήσιμη χωρίς μη serializable fitted objects."},
             {"choice": "Bounded loop με max 3 iterations", "reason": "Αποτρέπει άπειρο agent loop και ανεξέλεγκτες LLM/ML δαπάνες."},
+            {"choice": "Plan πάνω στο baseline preprocessing", "reason": "Ό,τι δεν αλλάζει ρητά το plan μένει ίδιο με το conventional pipeline, οπότε κάθε διαφορά οφείλεται μόνο στις ενέργειες του Agent."},
+            {"choice": "Πλήρες ιστορικό στο retry prompt", "reason": "Το LLM βλέπει τι πρότεινε, γιατί απορρίφθηκε και πόσο άλλαξαν οι μετρικές, ώστε να μη ξαναπροτείνει το ίδιο plan."},
         ],
-        "official_run": {"run_id": run["run_id"], "iterations": run["iterations"], "termination": run["termination_action"], "max_iterations": 3},
+        "official_run": {"run_id": run["run_id"], "iterations": run["iterations"], "termination": run["termination_action"], "max_iterations": max_iterations},
     }
 
 
@@ -437,7 +545,20 @@ def build_snapshot() -> dict[str, Any]:
     """Assemble every explorer section from the official run artifacts."""
 
     run = read_json(REPO_ROOT / "logs" / "agentic" / "run_summary.json")
-    plan_record = read_json(REPORTS / "transformation_plans" / "plan-1.json")
+    checkpoint = read_json(CHECKPOINTS / f"{run['run_id']}.json")
+    if checkpoint["run_id"] != run["run_id"]:
+        raise ValueError("Checkpoint and run summary belong to different runs")
+    records = checkpoint["history"]
+    history = iteration_history(checkpoint)
+    if len(history) != int(run["iterations"]):
+        raise ValueError("Checkpoint history does not match the reported iteration count")
+    selected = next((item for item in history if item["plan_id"] == run["selected_plan_id"]), None)
+    if selected is None:
+        raise ValueError(f"Selected plan {run['selected_plan_id']} not found in checkpoint history")
+    plan_record = read_json(REPORTS / "transformation_plans" / f"{run['selected_plan_id']}.json")
+    if plan_record["plan"]["plan_id"] != run["selected_plan_id"]:
+        raise ValueError("Selected plan artifact does not match the run summary")
+    max_iterations = int(checkpoint["max_iterations"])
     test_metrics = label_rows(read_csv(REPORTS / "metrics" / "test_dataset_results.csv"))
     agentic_results = label_rows(read_csv(REPORTS / "metrics" / "agentic_results.csv"))
     conventional_results = label_rows(
@@ -451,7 +572,7 @@ def build_snapshot() -> dict[str, Any]:
     test_rows = 123_580
 
     return {
-        "snapshot_version": "1.0.0",
+        "snapshot_version": "1.1.0",
         "generated_at_utc": datetime.now(UTC).isoformat(),
         "source_run_id": run["run_id"],
         "methodology": {
@@ -502,13 +623,15 @@ def build_snapshot() -> dict[str, Any]:
                 {"term": "Paired comparison", "plain": "Αφαιρούμε Conventional από Agentic μέσα στο ίδιο fold.", "why": "Κοινές validation γραμμές ακυρώνουν μεγάλο μέρος του θορύβου δυσκολίας μεταξύ folds."},
                 {"term": "p-value", "plain": "Πόσο ασύμβατη είναι η παρατηρούμενη διαφορά με την υπόθεση ότι δεν υπάρχει συστηματική διαφορά.", "why": "Δεν είναι η πιθανότητα ότι το Agentic είναι καλύτερο και δεν μετρά το μέγεθος του οφέλους."},
                 {"term": "Holm correction", "plain": "Αυστηρότερη προσαρμογή των p-values όταν κάνουμε πολλούς ελέγχους.", "why": "Περιορίζει τα τυχαία σημαντικά ευρήματα από πολλαπλές model/metric συγκρίσεις."},
+                {"term": "Nadeau–Bengio test", "plain": "Paired t-test που μεγαλώνει τη διασπορά κατά τον λόγο validation/train, επειδή τα training sets του repeated CV επικαλύπτονται.", "why": "Είναι πιο συντηρητικό από το Wilcoxon, που θεωρεί τα 25 folds ανεξάρτητα."},
+                {"term": "Baseline contract", "plain": "Το Agent plan εφαρμόζεται πάνω στο conventional preprocessing· ό,τι δεν αλλάζει ρητά μένει ίδιο.", "why": "Εξασφαλίζει ότι κάθε διαφορά οφείλεται μόνο στις ενέργειες του Agent."},
                 {"term": "Test dataset", "plain": "Μεταγενέστερες συναλλαγές που μένουν κλειδωμένες μέχρι να παγώσει η μέθοδος.", "why": "Προσεγγίζει το πραγματικό σενάριο εκπαίδευσης στο παρελθόν και πρόβλεψης στο μέλλον."},
                 {"term": "Data leakage", "plain": "Χρήση πληροφορίας από validation/test ή το μέλλον κατά την εκπαίδευση.", "why": "Δίνει υπερβολικά αισιόδοξη επίδοση που δεν επαναλαμβάνεται σε άγνωστα δεδομένα."},
                 {"term": "MCAR", "plain": "Missing Completely At Random: οι θέσεις που χαλάνε επιλέγονται ανεξάρτητα από τις τιμές και το label.", "why": "Προσφέρει απλό, ελεγχόμενο πρώτο σενάριο data-quality degradation."},
             ],
         },
-        "langgraph": langgraph_payload(run, plan_record),
-        "workflow": workflow_steps(),
+        "langgraph": langgraph_payload(run, history, records, max_iterations),
+        "workflow": workflow_steps(run, selected),
         "datasets": {
             "raw": {"rows": 6_362_620, "fraud": 8_213, "normal": 6_354_407, "steps": 743},
             "training": {
@@ -554,8 +677,8 @@ def build_snapshot() -> dict[str, Any]:
             "after_score": float(run["selected_data_quality_score"]),
             "delta": float(run["selected_quality_delta"]),
             "interpretation": (
-                "Η βελτίωση αφορά κυρίως completeness μετά την imputation· "
-                "δεν ισοδυναμεί με αντίστοιχη βελτίωση fraud detection."
+                "Η βελτίωση αφορά μόνο completeness μετά την imputation· στο sampled report "
+                "τα validity/consistency checks είναι κενά. Δεν ισοδυναμεί με βελτίωση fraud detection."
             ),
         },
         "cross_validation": {
@@ -604,15 +727,18 @@ def build_snapshot() -> dict[str, Any]:
             "feedback": plan_record["feedback"],
             "iterations": int(run["iterations"]),
             "termination_action": run["termination_action"],
+            "history": history,
         },
         "caveats": [
             "Το επίσημο πείραμα καλύπτει μόνο 5% MCAR missingness στη στήλη type.",
+            *result_caveats(paired_tests, conventional_results),
+            "Η FeedbackPolicy δέχεται και βελτίωση μόνο της ποιότητας χωρίς πτώση PR-AUC· ένα plan μπορεί να γίνει ACCEPT χωρίς προβλεπτικό κέρδος.",
+            "Δεν υπάρχουν baselines «conventional + mode imputation» ή rule-based agent χωρίς LLM, που θα απομόνωναν τη συμβολή του LLM.",
+            "Ο Agent εκτελέστηκε μία φορά στην τελική διαμόρφωση· το remote LLM δεν δίνει πάντα το ίδιο plan, ακόμη και με temperature 0.",
             "Το training sample έχει τεχνητή αναλογία 10:1 και οι μετρικές του δεν συγκρίνονται αριθμητικά με τις test μετρικές φυσικής prevalence.",
             "Το test dataset παραμένει καθαρό: εξετάζεται training σε degraded ιστορικά δεδομένα και inference σε καθαρά μελλοντικά δεδομένα.",
-            "Τα 25 repeated folds είναι συζευγμένες επαναδειγματοληψίες του ίδιου sample, όχι 25 ανεξάρτητα datasets.",
+            "Τα 25 repeated folds είναι συζευγμένες επαναδειγματοληψίες του ίδιου sample, όχι 25 ανεξάρτητα datasets· γι’ αυτό αναφέρεται και το Nadeau–Bengio.",
             "Μία test περίοδος δίνει μία out-of-time εκτίμηση και όχι confidence interval από πολλαπλά χρονικά windows.",
-            "Στο τελικό plan η Logistic Regression δεν έχει το StandardScaler του conventional pipeline, άρα η διαφορά της δεν αποδίδεται μόνο στην imputation.",
-            "Στατιστική σημαντικότητα δεν συνεπάγεται μεγάλη ή επιχειρησιακά σημαντική βελτίωση.",
         ],
     }
 

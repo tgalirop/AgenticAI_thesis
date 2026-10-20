@@ -13,6 +13,20 @@ export interface WorkflowStep {
   input: string;
   output: string;
   source_files: string[];
+  node_subtitle?: string;
+}
+
+export interface IterationSummary {
+  iteration: number;
+  plan_id: string;
+  actions_summary: string;
+  validation_valid: boolean;
+  decision: string;
+  reason_code: string;
+  primary_metric_delta: number | null;
+  quality_delta: number | null;
+  runtime_multiplier: number | null;
+  recommendations: string[];
 }
 
 export interface MetricRow {

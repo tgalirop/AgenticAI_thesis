@@ -64,7 +64,7 @@ export function LangGraphLab({ graph }: { graph: ExplorerPayload["langgraph"] })
     <div className="lab-toolbar">
       <div><span className="eyebrow">Guided state simulation</span><strong>{graph.library}</strong></div>
       <div className="scenario-tabs">
-        <button className={scenario === "official" ? "active" : ""} onClick={() => reset("official")}><CheckCircle2 /> Επίσημο ACCEPT run</button>
+        <button className={scenario === "official" ? "active" : ""} onClick={() => reset("official")}><CheckCircle2 /> Επίσημο run · {graph.official_run.iterations} iterations · {graph.official_run.termination}</button>
         <button className={scenario === "invalid" ? "active" : ""} onClick={() => reset("invalid")}><AlertTriangle /> Invalid → RETRY</button>
       </div>
     </div>

@@ -51,10 +51,10 @@ export function WorkflowExplorer({ steps }: WorkflowExplorerProps) {
     { id: "conventional", detailId: "pipelines", x: -55, y: 900, phase: "PIPELINE A", title: "Conventional benchmark", subtitle: "Fixed preprocessing + 3 models", variant: "conventional", icon: <ShieldCheck /> },
     { id: "agentic", detailId: "agent", x: 220, y: 900, phase: "PIPELINE B", title: "LangGraph Agent", subtitle: "Plan → validate → execute → feedback", variant: "agentic", icon: <Bot /> },
     { id: "paired", detailId: "paired", x: 82, y: 1070, phase: "TRAINING EVIDENCE", title: "Paired 5×5 comparison", subtitle: "3 models · 25 κοινά folds", variant: "comparison", icon: <GitCompareArrows /> },
-    { id: "freeze", detailId: "freeze", x: 82, y: 1215, phase: "DECISION GATE", title: "Freeze selected plan", subtitle: "plan-1 · ACCEPT · iteration 1", badge: "FROZEN", variant: "freeze", icon: <LockKeyhole /> },
+    { id: "freeze", detailId: "freeze", x: 82, y: 1215, phase: "DECISION GATE", title: "Freeze selected plan", subtitle: detailById.get("freeze")?.node_subtitle ?? "Selected plan · frozen", badge: "FROZEN", variant: "freeze", icon: <LockKeyhole /> },
     { id: "test_dataset", detailId: "test_dataset", x: 320, y: 1390, phase: "FINAL EVALUATION", title: "Test dataset", subtitle: "Conventional vs Agentic · once", variant: "final", icon: <TestTube2 /> },
     { id: "statistics", detailId: "statistics", x: 320, y: 1540, phase: "THESIS EVIDENCE", title: "Results & interpretation", subtitle: "Metrics · statistics · cost · figures", badge: "OUTPUT", variant: "output", icon: <FileCode2 /> },
-  ], []);
+  ], [detailById]);
 
   const nodes = useMemo<Node[]>(() => architecture.map((item) => ({
     id: item.id,

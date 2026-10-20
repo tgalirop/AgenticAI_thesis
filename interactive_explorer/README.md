@@ -44,7 +44,9 @@ python interactive_explorer/tools/build_snapshot.py
 
 Ο generator:
 
-1. διαβάζει τα επίσημα aggregate artifacts,
+1. διαβάζει τα επίσημα aggregate artifacts, το επιλεγμένο plan του run summary και
+   το local checkpoint `artifacts/checkpoints/<run_id>.json`, από το οποίο
+   αναπαράγει όλα τα iterations του Agent,
 2. υπολογίζει PR/ROC curve points από τις αποθηκευμένες προβλέψεις,
 3. επαληθεύει ότι τα AUC των καμπυλών συμφωνούν με τα επίσημα CSV,
 4. γράφει μόνο ένα μικρό JSON snapshot μέσα στο web υποσύστημα.
